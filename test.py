@@ -1,10 +1,8 @@
 import torch
 from matplotlib import pyplot as plt
 
-device = "cpu"
+a = torch.ones([10, 10])
 
-losses = torch.load("losses.pt").to(device=device).detach()
-rewards = torch.load("rewards.pt").to(device=device).detach()
+b = torch.fill(torch.zeros([10, 10]), 2)
 
-plt.plot(rewards)
-plt.show()
+print(a, torch.zeros(a.shape))

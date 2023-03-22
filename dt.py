@@ -38,14 +38,19 @@ class DecisionTransformer(nn.Module):
 
         return e.clone()
 
-    def loss(self, states, state_preds, actions, rtgs, rtg_preds):
-        return -(rtgs * actions.sum(dim=2)).sum() + self.l2_loss(states, state_preds) + self.l2_loss(rtgs, rtg_preds)
+    def loss(self, states, state_preds, actions, actions_prev, rtgs, rtgs_prev, rtg_preds):
+        return -((rtgs - rtgs_prev) * (actions.sum(dim=2) - actions_prev.sum(dim=2))).sum() + self.l2_loss(states, state_preds) + self.l2_loss(rtgs, rtg_preds)
 
-    def train_iter(self, hist):
+    def train_iter(self, hist, hist_prev):
         self.optim.zero_grad()
 
         # do it right
-        loss = self.loss(hist.states, hist.state_preds, hist.actions, hist.rtgs, hist.rtg_preds)
+        if hist_prev:
+            loss = self.loss(hist.states, hist.state_preds, hist.actions, hist_prev.actions.detach(), hist.rtgs, hist_prev.rtgs.detach(), hist.rtg_preds)
+        else:
+            ones_actions_prev = torch.ones(hist.actions.shape, device=self.device)
+            ones_rtgs_prev = torch.ones(hist.rtgs.shape, device=self.device)
+            loss = self.loss(hist.states, hist.state_preds, hist.actions, ones_actions_prev, hist.rtgs, ones_rtgs_prev, hist.rtg_preds)
         # print("loss", loss)
 
         loss.backward()

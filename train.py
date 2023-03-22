@@ -31,6 +31,8 @@ env, state_dim, image_dim, act_dim = init_env(env_name)
 
 model = DecisionTransformer(state_dim=encoding_dim, act_dim=act_dim, n_positions=n_positions, device=device)
 
+hist_prev = None
+
 for e in range(EPOCHS):
     hist, attention_mask = reset_env(env, model, act_dim, encoding_dim, TARGET_RETURN, dtype, device)
 
@@ -68,7 +70,10 @@ for e in range(EPOCHS):
     # torch.cuda.empty_cache()
 
     # train (also do it right)
-    loss = model.train_iter(hist)
+    loss = model.train_iter(hist, hist_prev)
+
+    hist_prev = hist
+
     losses = torch.cat([losses, loss.reshape([1])])
     rewards = torch.cat([rewards, total_reward.reshape([1])])
     print(e, "loss, total_reward", loss, total_reward)
