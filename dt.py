@@ -38,8 +38,9 @@ class DecisionTransformer(nn.Module):
 
         return e.clone()
 
-    def loss(self, states, state_preds, actions, actions_prev, rtgs, rtgs_prev, rtg_preds):
-        return -((rtgs - rtgs_prev) * (actions.sum(dim=2) - actions_prev.sum(dim=2))).sum() + self.l2_loss(states, state_preds) + self.l2_loss(rtgs, rtg_preds)
+    def loss(self, states, state_preds, actions, rtgs, rtg_preds, critic):
+        # -norm(critic rtgs) + l2 bla bla
+        return -critic(states, actions) + self.l2_loss(states, state_preds) + self.l2_loss(rtgs, rtg_preds)
 
     def train_iter(self, hist, hist_prev):
         self.optim.zero_grad()

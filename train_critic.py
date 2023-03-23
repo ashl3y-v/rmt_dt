@@ -33,28 +33,37 @@ critic = Critic(state_dim=encoding_dim, act_dim=act_dim, dtype=dtype, device=dev
 
 for e in range(EPOCHS):
     observation, _ = env.reset()
-    state = model.proc_state(observation)
+    states = torch.tensor([], dtype=dtype, device=device)
+    rewards = torch.tensor([], dtype=dtype, device=device)
+    states = torch.cat([states, model.proc_state(observation)], dim=2)
 
     terminated = truncated = False
     while not (terminated or truncated):
-        action = torch.randn([1, 1, 3], device=device)
-        state_pred, reward_pred = critic(state, action)
+        action = np.random.randn(3)
 
-        action = action.detach().squeeze().cpu().numpy()
         observation, reward, terminated, truncated, info = env.step(action)
 
-        state = model.proc_state(observation).to(device=device).reshape([1, 1, encoding_dim])
+        x = torch.cat([model.proc_state(observation), torch.from_numpy(action).to(device=device).unsqueeze(0).unsqueeze(0)], dim=2)
+        states = torch.cat([states, x], dim=2)
+        rewards = torch.cat([rewards, torch.tensor(reward, device=device).reshape([1, 1])], dim=1)
 
-        reward = torch.tensor(reward, device=device).reshape([1, 1])
-        
-        # train
-        loss = critic.train_iter(state, state_pred, reward, reward_pred)
+    # rtg update
+    total_reward = rewards.sum()
+    rtgs = torch.zeros([1, states.shape[1]], device=device)
+    remaining_reward = total_reward.item()
+    for i in range(rtgs.shape[-2]):
+        rtgs[:, i, 0] = remaining_reward
+        remaining_reward -= rewards[i, 0]
 
-        losses = torch.cat([losses, loss.reshape([1])])
-        print(e, "loss", loss)
+    rtg_preds = critic(states)
 
-    for g in critic.optim.param_groups:
-        g['lr'] = g['lr'] * 0.99
+    # train
+    loss = critic.train_iter(rtgs, rtg_preds)
+    losses = torch.cat([losses, loss.reshape([1])])
+    print(e, "loss", loss)
+
+    # for g in critic.optim.param_groups:
+    #     g['lr'] = g['lr'] * 0.99
 
     if e % 10 == 0:
         torch.save(losses, "losses.pt")
