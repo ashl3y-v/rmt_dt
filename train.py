@@ -25,13 +25,20 @@ env_name = "CarRacing-v2"
 encoding_dim = 768
 n_positions = 8192
 
-save_name = "model"  # input("Model save name: ")
+save_name = input("Model save name: ")
 
 env, state_dim, image_dim, act_dim = init_env(env_name)
 
-model = DecisionTransformer(state_dim=encoding_dim, act_dim=act_dim, n_positions=n_positions, device=device)
-
-hist_prev = None
+load_model = False
+load_critic = True
+if load_model:
+    model = torch.load("model.pt").to(dtype=dtype, device=device)
+    if load_critic:
+        model.critic = torch.load("critic.pt").to(dtype=dtype, device=device)
+else:
+    model = DecisionTransformer(state_dim=encoding_dim, act_dim=act_dim, n_positions=n_positions, device=device)
+    if load_critic:
+        model.critic = torch.load("critic.pt").to(dtype=dtype, device=device)
 
 for e in range(EPOCHS):
     hist, attention_mask = reset_env(env, model, act_dim, encoding_dim, TARGET_RETURN, dtype, device)
@@ -52,12 +59,12 @@ for e in range(EPOCHS):
 
         attention_mask = torch.cat([attention_mask, torch.ones([1, 1], device=device)])
 
-        # print("states", hist.states.shape, hist.state_preds.shape)
+        # print("states", hist.states.shape[1], ", ", end="")
         # delete
         # if hist.states.shape[1] == 89:
         #     terminated = True
 
-        if hist.states.shape[1] == 400:
+        if hist.states.shape[1] == 200:
             terminated = True
 
         # don't delete
@@ -70,18 +77,18 @@ for e in range(EPOCHS):
     # torch.cuda.empty_cache()
 
     # train (also do it right)
-    loss = model.train_iter(hist, hist_prev)
-
-    hist_prev = hist
+    loss, critic_loss = model.train_iter(hist)
 
     losses = torch.cat([losses, loss.reshape([1])])
     rewards = torch.cat([rewards, total_reward.reshape([1])])
-    print(e, "loss, total_reward", loss, total_reward)
+    print(e, "loss, critic_loss, total_reward", loss, critic_loss, total_reward)
 
     if e % 10 == 0:
         torch.save(losses, "losses.pt")
         torch.save(rewards, "rewards.pt")
         torch.save(model, save_name + ".pt")
+
+    torch.cuda.empty_cache()
 
 torch.save(model, save_name + ".pt")
 torch.save(losses, "losses.pt")

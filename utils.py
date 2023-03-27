@@ -3,8 +3,8 @@ import gymnasium as gym
 from hist import Hist
 
 
-def init_env(env_name):
-    env = gym.make(env_name)
+def init_env(env_name, **kwargs):
+    env = gym.make(env_name, **kwargs)
     state_dim = env.observation_space.shape
     image_dim = [state_dim[2], state_dim[0], state_dim[1]]
     act_dim = env.action_space.shape[0]

@@ -1,8 +1,18 @@
 import torch
+from torch import nn
 from matplotlib import pyplot as plt
 
-a = torch.ones([10, 10])
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-b = torch.fill(torch.zeros([10, 10]), 2)
+class Frog(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.linear = nn.Linear(1, 1)
 
-print(a, torch.zeros(a.shape))
+    def forward(self, x):
+        return self.linear(x)
+
+frog = Frog()
+print(next(frog.parameters()).device)
+frog.cuda()
+print(next(frog.parameters()).device)

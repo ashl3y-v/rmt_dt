@@ -16,12 +16,12 @@ class Critic(nn.Module):
         self.reward_dim = reward_dim
         self.nhead = nhead
 
-        encoder_layer = nn.TransformerEncoderLayer(d_model=state_dim + act_dim, nhead=nhead).to(device=device)
-        self.transformer = nn.TransformerEncoder(encoder_layer=encoder_layer, num_layers=6).to(device=device)
-        self.get_reward = nn.Linear(state_dim + act_dim, 1)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=state_dim + act_dim, nhead=nhead).to(dtype=dtype, device=device)
+        self.transformer = nn.TransformerEncoder(encoder_layer=encoder_layer, num_layers=6).to(dtype=dtype, device=device)
+        self.get_reward = nn.Linear(state_dim + act_dim, 1).to(dtype=dtype, device=device)
 
         self.l2_loss = nn.MSELoss()
-        self.optim = torch.optim.AdamW(self.parameters(), lr=0.001)
+        self.optim = torch.optim.AdamW(self.parameters(), lr=0.05)
 
     def forward(self, x):
         x = self.transformer(x)
@@ -30,7 +30,7 @@ class Critic(nn.Module):
         return x
 
     def loss(self, rtgs, rtg_preds):
-        return self.l2_loss(rtgs, rtg_preds)
+        return self.l2_loss(rtgs.squeeze(), rtg_preds.squeeze())
 
     def train_iter(self, rtgs, rtg_preds):
         self.optim.zero_grad()

@@ -1,10 +1,12 @@
 import torch
+import random
 import gymnasium as gym
 from torch import nn
 from torch.nn import functional as F
 from datetime import datetime
 from dt import DecisionTransformer
 from utils import init_env, reset_env
+import numpy as np
 
 TARGET_RETURN = 3000
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -30,6 +32,7 @@ while not (terminated or truncated):
     action_pred = action_pred.reshape([1, 1, act_dim])
 
     action = action_pred.detach().squeeze().cpu().numpy()
+    # action = np.array([random.uniform(0.75, 1), random.uniform(-1, 1), random.uniform(0, 0.2)])
     print(action)
     observation, reward, terminated, truncated, info = env.step(action)
 

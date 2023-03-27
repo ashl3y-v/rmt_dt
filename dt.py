@@ -3,10 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import transformers
+from critic import Critic
 
 
 class DecisionTransformer(nn.Module):
-    def __init__(self, state_dim=1024, act_dim=4, n_positions=8192, image_dim=[3, 96, 96], dtype=torch.float32, device="cpu"):
+    def __init__(self, state_dim=1024, act_dim=4, n_positions=8192, image_dim=[3, 96, 96], critic=None, dtype=torch.float32, device="cpu"):
         super().__init__()
         self.dtype = dtype
         self.device = device
@@ -24,7 +25,11 @@ class DecisionTransformer(nn.Module):
         self.vit = transformers.BeitModel.from_pretrained(model_ckpt).to(device=device) # return_dict=False
 
         self.l2_loss = nn.MSELoss()
-        self.optim = torch.optim.AdamW(self.parameters(), lr=0.01)
+        if critic:
+            self.critic = torch.load(critic).to(dtype=dtype, device=device)
+        else:
+            self.critic = Critic(state_dim, act_dim, 1, nhead=3, dtype=dtype, device=device)
+        self.optim = torch.optim.AdamW(self.parameters(), lr=0.002)
 
     def forward(self, **kwargs):
         return self.transformer(**kwargs)
@@ -38,23 +43,20 @@ class DecisionTransformer(nn.Module):
 
         return e.clone()
 
-    def loss(self, states, state_preds, actions, rtgs, rtg_preds, critic):
-        # -norm(critic rtgs) + l2 bla bla
-        return -critic(states, actions) + self.l2_loss(states, state_preds) + self.l2_loss(rtgs, rtg_preds)
+    def loss(self, loss_critic, states, state_preds, rtgs, rtg_preds):
+        return torch.log(loss_critic) + torch.log(self.l2_loss(states, state_preds)) + torch.log(self.l2_loss(rtgs, rtg_preds))
 
-    def train_iter(self, hist, hist_prev):
+    def train_iter(self, hist):
         self.optim.zero_grad()
 
         # do it right
-        if hist_prev:
-            loss = self.loss(hist.states, hist.state_preds, hist.actions, hist_prev.actions.detach(), hist.rtgs, hist_prev.rtgs.detach(), hist.rtg_preds)
-        else:
-            ones_actions_prev = torch.ones(hist.actions.shape, device=self.device)
-            ones_rtgs_prev = torch.ones(hist.rtgs.shape, device=self.device)
-            loss = self.loss(hist.states, hist.state_preds, hist.actions, ones_actions_prev, hist.rtgs, ones_rtgs_prev, hist.rtg_preds)
-        # print("loss", loss)
+        critic_rtg_preds = self.critic(torch.cat([hist.states, hist.actions], dim=2))
+        loss_critic = -critic_rtg_preds.sum()
+        loss = self.loss(loss_critic, hist.states, hist.state_preds, hist.rtgs, hist.rtg_preds)
 
-        loss.backward()
+        loss.backward(retain_graph=True)
         self.optim.step()
 
-        return loss
+        critic_loss = self.critic.train_iter(hist.rtgs, critic_rtg_preds)
+
+        return loss, critic_loss
