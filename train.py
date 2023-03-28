@@ -13,6 +13,8 @@ from utils import init_env, reset_env
 
 torch.autograd.set_detect_anomaly(True)
 
+args = sys.argv
+
 TARGET_RETURN = 3000
 EPOCHS = 100
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -29,8 +31,9 @@ save_name = input("Model save name: ")
 
 env, state_dim, image_dim, act_dim = init_env(env_name)
 
-load_model = False
-load_critic = True
+load_model = bool(int(args[1]))
+load_critic = bool(int(args[2]))
+
 if load_model:
     model = torch.load("model.pt").to(dtype=dtype, device=device)
     if load_critic:

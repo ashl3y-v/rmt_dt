@@ -21,7 +21,7 @@ class Critic(nn.Module):
         self.get_reward = nn.Linear(state_dim + act_dim, 1).to(dtype=dtype, device=device)
 
         self.l2_loss = nn.MSELoss()
-        self.optim = torch.optim.AdamW(self.parameters(), lr=0.05)
+        self.optim = torch.optim.AdamW(self.parameters(), lr=0.075)
 
     def forward(self, x):
         x = self.transformer(x)

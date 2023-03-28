@@ -29,7 +29,7 @@ class DecisionTransformer(nn.Module):
             self.critic = torch.load(critic).to(dtype=dtype, device=device)
         else:
             self.critic = Critic(state_dim, act_dim, 1, nhead=3, dtype=dtype, device=device)
-        self.optim = torch.optim.AdamW(self.parameters(), lr=0.002)
+        self.optim = torch.optim.AdamW(self.parameters(), lr=0.003)
 
     def forward(self, **kwargs):
         return self.transformer(**kwargs)
