@@ -50,9 +50,10 @@ for e in range(EPOCHS):
     while not (terminated or truncated):
         state_pred, action_pred, rtg_pred = hist.predict(model, attention_mask)
         state_pred = state_pred.reshape([1, 1, encoding_dim])
-        action_pred = action_pred.reshape([1, 1, act_dim])
+        # action_pred = action_pred.reshape([1, 1, act_dim])
+        action = model.dist(action_preds).rsample()
 
-        action = action_pred.detach().squeeze().cpu().numpy()
+        # action = action_pred.detach().squeeze().cpu().numpy()
         observation, reward, terminated, truncated, info = env.step(action)
 
         state = model.proc_state(observation).to(device=device).reshape([1, 1, encoding_dim])

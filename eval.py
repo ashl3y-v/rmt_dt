@@ -1,3 +1,4 @@
+import sys
 import torch
 import random
 import gymnasium as gym
@@ -7,6 +8,8 @@ from datetime import datetime
 from dt import DecisionTransformer
 from utils import init_env, reset_env
 import numpy as np
+
+args = sys.argv
 
 TARGET_RETURN = 3000
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -21,7 +24,12 @@ state_dim = env.observation_space.shape
 image_dim = [state_dim[2], state_dim[0], state_dim[1]]
 act_dim = env.action_space.shape[0]
 
-model = torch.load("model.pt").to(device=device, dtype=dtype)
+load_model = bool(int(args[1]))
+
+if load_model:
+    model = torch.load("model.pt").to(dtype=dtype, device=device)
+else:
+    model = DecisionTransformer(state_dim=encoding_dim, act_dim=act_dim, n_positions=n_positions, device=device)
 
 hist, attention_mask = reset_env(env, model, act_dim, encoding_dim, TARGET_RETURN, dtype, device)
 
@@ -33,8 +41,9 @@ while not (terminated or truncated):
 
     action = action_pred.detach().squeeze().cpu().numpy()
     # action = np.array([random.uniform(0.75, 1), random.uniform(-1, 1), random.uniform(0, 0.2)])
-    print(action)
+    action = torch.distributions.Normal(loc=torch.tensor([1, 1, 0], dtype=torch.float32), scale=1,).rsample().to(dtype=torch.float32, device="cpu")
     observation, reward, terminated, truncated, info = env.step(action)
+    print(reward)
 
     state = model.proc_state(observation).to(device=device).reshape([1, 1, encoding_dim])
 

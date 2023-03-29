@@ -1,7 +1,9 @@
+from math import sqrt, pi
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.distributions import Normal
 import transformers
 from critic import Critic
 
@@ -25,14 +27,20 @@ class DecisionTransformer(nn.Module):
         self.vit = transformers.BeitModel.from_pretrained(model_ckpt).to(device=device) # return_dict=False
 
         self.l2_loss = nn.MSELoss()
-        if critic:
-            self.critic = torch.load(critic).to(dtype=dtype, device=device)
-        else:
-            self.critic = Critic(state_dim, act_dim, 1, nhead=3, dtype=dtype, device=device)
         self.optim = torch.optim.AdamW(self.parameters(), lr=0.003)
 
     def forward(self, **kwargs):
         return self.transformer(**kwargs)
+
+    # def get_mu_sigma(self, action_preds):
+    #     action_preds = action_preds.squeeze()
+    #     mid = int(len(action_preds) / 2)
+    #     mu = action_preds[:mid]
+    #     sigma = action_preds[mid:]
+    #     return mu, sigma
+
+    def action_dist(self, action_preds):
+        return Normal(loc=action_preds, scale=1)
 
     def proc_state(self, o):
         with torch.inference_mode():
@@ -43,20 +51,18 @@ class DecisionTransformer(nn.Module):
 
         return e.clone()
 
-    def loss(self, loss_critic, states, state_preds, rtgs, rtg_preds):
-        return torch.log(loss_critic) + torch.log(self.l2_loss(states, state_preds)) + torch.log(self.l2_loss(rtgs, rtg_preds))
+    def loss(self, prob, states, state_preds, rtgs, rtg_preds):
+        advantages = rtgs - rtgs.mean()
+        return -prob * advantages + torch.log(self.l2_loss(states, state_preds)) + torch.log(self.l2_loss(rtgs, rtg_preds))
 
     def train_iter(self, hist):
         self.optim.zero_grad()
 
         # do it right
-        critic_rtg_preds = self.critic(torch.cat([hist.states, hist.actions], dim=2))
-        loss_critic = -critic_rtg_preds.sum()
-        loss = self.loss(loss_critic, hist.states, hist.state_preds, hist.rtgs, hist.rtg_preds)
+        prob = self.prob(hist.actions, hist.actions)
+        loss = self.loss(prob, hist.states, hist.state_preds, hist.rtgs, hist.rtg_preds)
 
-        loss.backward(retain_graph=True)
+        loss.backward()
         self.optim.step()
 
-        critic_loss = self.critic.train_iter(hist.rtgs, critic_rtg_preds)
-
-        return loss, critic_loss
+        return loss
