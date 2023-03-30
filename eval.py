@@ -29,7 +29,7 @@ load_model = bool(int(args[1]))
 if load_model:
     model = torch.load("model.pt").to(dtype=dtype, device=device)
 else:
-    model = DecisionTransformer(state_dim=encoding_dim, act_dim=act_dim, n_positions=n_positions, device=device)
+    model = DecisionTransformer(state_dim=encoding_dim, act_dim=act_dim * 2, n_positions=n_positions, device=device)
 
 hist, attention_mask = reset_env(env, model, act_dim, encoding_dim, TARGET_RETURN, dtype, device)
 

@@ -1,14 +1,14 @@
 import torch
-from torch import nn
-from matplotlib import pyplot as plt
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.distributions import Normal
+import transformers
 from dt import DecisionTransformer
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = DecisionTransformer()
 
-model = DecisionTransformer(act_dim=3, device=device)
+i = torch.randn([1, 5, 775])
 
-action_preds = torch.randn([3])
-action = torch.randn([3]) + torch.tensor([2, 2, 2])
-r = model.prob(action_preds, action)
+r = model(inputs_embeds=i)
 
-print(r)
+print(r.rhape)

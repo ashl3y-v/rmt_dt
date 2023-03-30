@@ -27,21 +27,16 @@ env_name = "CarRacing-v2"
 encoding_dim = 768
 n_positions = 8192
 
-save_name = input("Model save name: ")
+save_name = "model" # input("Model save name: ")
 
 env, state_dim, image_dim, act_dim = init_env(env_name)
 
 load_model = bool(int(args[1]))
-load_critic = bool(int(args[2]))
 
 if load_model:
     model = torch.load("model.pt").to(dtype=dtype, device=device)
-    if load_critic:
-        model.critic = torch.load("critic.pt").to(dtype=dtype, device=device)
 else:
     model = DecisionTransformer(state_dim=encoding_dim, act_dim=act_dim, n_positions=n_positions, device=device)
-    if load_critic:
-        model.critic = torch.load("critic.pt").to(dtype=dtype, device=device)
 
 for e in range(EPOCHS):
     hist, attention_mask = reset_env(env, model, act_dim, encoding_dim, TARGET_RETURN, dtype, device)
@@ -51,10 +46,10 @@ for e in range(EPOCHS):
         state_pred, action_pred, rtg_pred = hist.predict(model, attention_mask)
         state_pred = state_pred.reshape([1, 1, encoding_dim])
         # action_pred = action_pred.reshape([1, 1, act_dim])
-        action = model.dist(action_preds).rsample()
+        action_pred = model.action_dist(action_pred, 0.01).rsample().reshape([1, 1, act_dim])
 
         # action = action_pred.detach().squeeze().cpu().numpy()
-        observation, reward, terminated, truncated, info = env.step(action)
+        observation, reward, terminated, truncated, info = env.step(action_pred.detach().squeeze().cpu().numpy())
 
         state = model.proc_state(observation).to(device=device).reshape([1, 1, encoding_dim])
 
@@ -81,11 +76,11 @@ for e in range(EPOCHS):
     # torch.cuda.empty_cache()
 
     # train (also do it right)
-    loss, critic_loss = model.train_iter(hist)
+    loss = model.train_iter(hist)
 
     losses = torch.cat([losses, loss.reshape([1])])
     rewards = torch.cat([rewards, total_reward.reshape([1])])
-    print(e, "loss, critic_loss, total_reward", loss, critic_loss, total_reward)
+    print(e, "loss, total_reward", loss, total_reward)
 
     if e % 10 == 0:
         torch.save(losses, "losses.pt")
