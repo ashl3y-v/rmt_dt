@@ -66,7 +66,6 @@ for e in range(EPOCHS):
         rtgs[i, 0] = remaining_reward
         remaining_reward -= rewards[i, 0]
 
-    print(states.shape)
     rtg_preds = critic(states)
 
     # train

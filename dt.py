@@ -15,8 +15,9 @@ class DecisionTransformer(nn.Module):
         self.act_dim = act_dim
 
         # crashes if length is greater than n_positions
-        config = transformers.TransfoXLConfig(d_model=state_dim + 2 * act_dim + 1, d_embedding=state_dim + 2 * act_dim + 1, n_layer=n_layers, n_head=n_heads)
+        config = transformers.TransfoXLConfig(d_model=state_dim + act_dim + 1, d_embedding=state_dim + act_dim + 1, n_layer=n_layers, n_head=n_heads)
         self.transformer = transformers.TransfoXLModel(config)
+        self.linear_0 = nn.Linear(state_dim + act_dim + 1, state_dim + 2 * act_dim + 1)
 
         model_ckpt = "microsoft/beit-base-patch16-224-pt22k-ft22k"
         self.image_dim=image_dim
@@ -27,7 +28,10 @@ class DecisionTransformer(nn.Module):
         self.optim = torch.optim.AdamW(self.parameters(), lr=0.001)
 
     def forward(self, *args, **kwargs):
-        return self.transformer(*args, **kwargs)
+        x = self.transformer(*args, **kwargs)
+        x = F.normalize(F.relu(x.last_hidden_state[:, -1:, :]))
+        x = self.linear_0(x)
+        return x
 
     # def get_mu_sigma(self, action_preds):
     #     action_preds = action_preds.squeeze()
@@ -38,10 +42,14 @@ class DecisionTransformer(nn.Module):
 
     def split(self, x):
         # state, action, reward
-        return x[:, :, :self.state_dim], x[:, :, self.state_dim:self.state_dim + self.act_dim], x[:, :, self.state_dim + self.act_dim:]
+        s = x[:, :, :self.state_dim]
+        a = x[:, :, self.state_dim:self.state_dim + 2 * self.act_dim]
+        r = x[:, :, self.state_dim + 2 * self.act_dim:]
+        return s, a, r
 
-    def action_dist(self, action_preds, scale):
-        return Normal(loc=action_preds, scale=scale)
+    def action_dist(self, action_preds):
+        mid = int(action_preds.shape[-1] / 2)
+        return Normal(loc=action_preds[:, :, :mid], scale=torch.maximum(action_preds[:, :, mid:], torch.fill(action_preds[:, :, mid:], 0.01)))
 
     def prob(self, dist, actions):
         return dist.log_prob(actions)

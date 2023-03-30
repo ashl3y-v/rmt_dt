@@ -12,21 +12,12 @@ class Hist():
         self.rtg_preds = rtg_preds
         self.timestep = timestep
 
-    def predict(self, model, attention_mask):
+    def predict(self, model, attention_mask): # use attention_mask
         # with torch.inference_mode():
-        state_preds, action_preds, return_preds = model(
-            states=self.states,
-            actions=self.actions,
-            rewards=self.rewards,
-            returns_to_go=self.rtg_preds,
-            timesteps=self.timestep,
-            attention_mask=attention_mask,
-            return_dict=False,
-        )
+        inputs = torch.cat([self.states, self.actions, self.rtg_preds], dim=2)
+        output = model(inputs_embeds=inputs)
 
-        state_pred = state_preds[:, -1:, :]
-        action_pred = action_preds[:, -1:, :]
-        rtg_pred = return_preds[:, -1:, :]
+        state_pred, action_pred, rtg_pred = model.split(output)
 
         return state_pred, action_pred, rtg_pred
 

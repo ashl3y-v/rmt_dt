@@ -46,7 +46,8 @@ for e in range(EPOCHS):
         state_pred, action_pred, rtg_pred = hist.predict(model, attention_mask)
         state_pred = state_pred.reshape([1, 1, encoding_dim])
         # action_pred = action_pred.reshape([1, 1, act_dim])
-        action_pred = model.action_dist(action_pred, 0.01).rsample().reshape([1, 1, act_dim])
+        mid = int(action_pred.shape[-1] / 2)
+        action_pred = model.action_dist(action_pred).rsample().reshape([1, 1, act_dim])
 
         # action = action_pred.detach().squeeze().cpu().numpy()
         observation, reward, terminated, truncated, info = env.step(action_pred.detach().squeeze().cpu().numpy())
