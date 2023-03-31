@@ -14,18 +14,18 @@ def init_env(env_name, **kwargs):
 
 def reset_env(env, model, act_dim, encoding_dim, TARGET_RETURN, dtype=torch.float32, device="cpu"):
     observation, _ = env.reset()
-    actions = torch.zeros((1, 1, act_dim), device=device, dtype=dtype)
+    actions = torch.zeros([1, 1, act_dim], device=device, dtype=dtype)
+    probs = torch.ones([1, 1, act_dim], device=device, dtype=dtype)
     rewards = torch.zeros(1, 1, device=device, dtype=dtype)
 
     encoding = model.proc_state(observation)
     states = encoding.reshape(1, 1, encoding_dim).to(device=device, dtype=dtype)
-    state_preds = encoding.reshape(1, 1, encoding_dim).to(device=device, dtype=dtype)
 
     rtg_preds = torch.tensor(TARGET_RETURN, device=device, dtype=dtype).reshape(1, 1, 1)
 
     timestep = torch.tensor(0, device=device, dtype=torch.long).reshape(1, 1)
     attention_mask = torch.zeros(1, 1, device=device, dtype=dtype)
 
-    hist = Hist(states, state_preds, actions, rewards, rtg_preds, timestep, device=device)
+    hist = Hist(states, actions, probs, rewards, rtg_preds, timestep, device=device)
 
     return hist, attention_mask

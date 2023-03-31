@@ -3,10 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal
 import transformers
+import torch_optimizer
 
 
 class DecisionTransformer(nn.Module):
-    def __init__(self, state_dim=768, act_dim=3, n_layers=12, n_heads = 25, n_positions=8192, image_dim=[3, 96, 96], dtype=torch.float32, device="cpu"):
+    def __init__(self, state_dim=768, act_dim=3, n_layers=3, n_heads = 4, n_positions=8192, image_dim=[3, 96, 96], dtype=torch.float32, device="cpu"):
         super().__init__()
         self.dtype = dtype
         self.device = device
@@ -15,9 +16,10 @@ class DecisionTransformer(nn.Module):
         self.act_dim = act_dim
 
         # crashes if length is greater than n_positions
-        config = transformers.TransfoXLConfig(d_model=state_dim + act_dim + 1, d_embedding=state_dim + act_dim + 1, n_layer=n_layers, n_head=n_heads)
-        self.transformer = transformers.TransfoXLModel(config)
-        self.linear_0 = nn.Linear(state_dim + act_dim + 1, state_dim + 2 * act_dim + 1)
+        # config = transformers.BartConfig(d_model=state_dim + act_dim + 1, d_embedding=state_dim + act_dim + 1, n_layer=n_layers, n_head=n_heads)
+        # by default its in `block_sparse` mode with num_random_blocks=3, block_size=64
+        config = transformers.DecisionTransformerConfig(state_dim=state_dim, act_dim=2 * act_dim, n_positions=n_positions, n_layer=n_layers, n_head=n_heads)
+        self.transformer = transformers.DecisionTransformerModel(config).to(dtype=dtype, device=device)
 
         model_ckpt = "microsoft/beit-base-patch16-224-pt22k-ft22k"
         self.image_dim=image_dim
@@ -25,27 +27,13 @@ class DecisionTransformer(nn.Module):
         self.vit = transformers.BeitModel.from_pretrained(model_ckpt).to(device=device)
 
         self.l2_loss = nn.MSELoss()
-        self.optim = torch.optim.AdamW(self.parameters(), lr=0.001)
+        self.optim = torch_optimizer.Ranger(self.parameters(), lr=1E-4, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999,), eps=1e-5, weight_decay=0)
 
     def forward(self, *args, **kwargs):
+        kwargs["actions"] = torch.cat([kwargs["actions"], torch.zeros(kwargs["actions"].shape, device=self.device)], dim=2)
+
         x = self.transformer(*args, **kwargs)
-        x = F.normalize(F.relu(x.last_hidden_state[:, -1:, :]))
-        x = self.linear_0(x)
         return x
-
-    # def get_mu_sigma(self, action_preds):
-    #     action_preds = action_preds.squeeze()
-    #     mid = int(len(action_preds) / 2)
-    #     mu = action_preds[:mid]
-    #     sigma = action_preds[mid:]
-    #     return mu, sigma
-
-    def split(self, x):
-        # state, action, reward
-        s = x[:, :, :self.state_dim]
-        a = x[:, :, self.state_dim:self.state_dim + 2 * self.act_dim]
-        r = x[:, :, self.state_dim + 2 * self.act_dim:]
-        return s, a, r
 
     def action_dist(self, action_preds):
         mid = int(action_preds.shape[-1] / 2)
@@ -63,16 +51,15 @@ class DecisionTransformer(nn.Module):
 
         return e.clone()
 
-    def loss(self, actions, prob, states, state_preds, rtgs, rtg_preds):
+    def loss(self, actions, probs, rtgs):
         total_return = rtgs.max() # rtgs - rtgs.mean()
-        return -(prob * total_return).sum() + torch.log(self.l2_loss(states, state_preds)) + torch.log(self.l2_loss(rtgs, rtg_preds)) + torch.max(actions.abs())
+        return -(probs * total_return).sum() + actions.abs().sum()
 
     def train_iter(self, hist):
         self.optim.zero_grad()
 
         # do it right
-        prob = self.action_dist(hist.actions, 0.01).log_prob(hist.actions)
-        loss = self.loss(hist.actions, prob, hist.states, hist.state_preds, hist.rtgs, hist.rtg_preds)
+        loss = self.loss(hist.actions, hist.probs, hist.rtgs)
 
         loss.backward()
         self.optim.step()

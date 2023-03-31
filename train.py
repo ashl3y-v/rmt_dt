@@ -16,7 +16,7 @@ torch.autograd.set_detect_anomaly(True)
 args = sys.argv
 
 TARGET_RETURN = 3000
-EPOCHS = 100
+EPOCHS = 1000
 device = "cuda" if torch.cuda.is_available() else "cpu"
 dtype = torch.float32
 
@@ -44,18 +44,17 @@ for e in range(EPOCHS):
     terminated = truncated = False
     while not (terminated or truncated):
         state_pred, action_pred, rtg_pred = hist.predict(model, attention_mask)
-        state_pred = state_pred.reshape([1, 1, encoding_dim])
-        # action_pred = action_pred.reshape([1, 1, act_dim])
-        mid = int(action_pred.shape[-1] / 2)
-        action_pred = model.action_dist(action_pred).rsample().reshape([1, 1, act_dim])
+        dist = model.action_dist(action_pred)
+        action = dist.rsample().reshape([1, 1, act_dim])
+        prob = dist.log_prob(action)
 
         # action = action_pred.detach().squeeze().cpu().numpy()
-        observation, reward, terminated, truncated, info = env.step(action_pred.detach().squeeze().cpu().numpy())
+        observation, reward, terminated, truncated, info = env.step(action.detach().squeeze().cpu().numpy())
 
         state = model.proc_state(observation).to(device=device).reshape([1, 1, encoding_dim])
 
-        reward = torch.tensor(reward, device=device).reshape([1, 1])
-        hist.append(state, state_pred, action_pred, reward, rtg_pred, 1)
+        reward = torch.tensor(reward, device=device, requires_grad=False).reshape([1, 1])
+        hist.append(state, action, prob, reward, rtg_pred, 1)
 
         attention_mask = torch.cat([attention_mask, torch.ones([1, 1], device=device)])
 
@@ -70,6 +69,8 @@ for e in range(EPOCHS):
         # don't delete
         if hist.states.shape[1] == n_positions:
             terminated = True
+
+        torch.cuda.empty_cache()
 
     # update rtgs
     total_reward = hist.rtg_update()
