@@ -16,7 +16,7 @@ torch.autograd.set_detect_anomaly(True)
 args = sys.argv
 
 TARGET_RETURN = 3000
-EPOCHS = 1000
+EPOCHS = 10000
 device = "cuda" if torch.cuda.is_available() else "cpu"
 dtype = torch.float32
 
