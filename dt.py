@@ -7,7 +7,7 @@ import torch_optimizer
 
 
 class DecisionTransformer(nn.Module):
-    def __init__(self, state_dim=768, act_dim=3, n_layers=3, n_heads = 4, n_positions=8192, image_dim=[3, 96, 96], dtype=torch.float32, device="cpu"):
+    def __init__(self, state_dim=768, act_dim=3, n_layers=3, n_heads = 4, n_positions=8192, image_dim=[3, 96, 96], ppo_clip_value=0.2, dtype=torch.float32, device="cpu"):
         super().__init__()
         self.dtype = dtype
         self.device = device
@@ -27,7 +27,6 @@ class DecisionTransformer(nn.Module):
         self.vit = transformers.BeitModel.from_pretrained(model_ckpt).to(device=device)
 
         self.l2_loss = nn.MSELoss()
-        self.optim = torch_optimizer.Ranger(self.parameters(), lr=1E-4, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999,), eps=1e-5, weight_decay=0)
 
     def forward(self, *args, **kwargs):
         kwargs["actions"] = torch.cat([kwargs["actions"], torch.zeros(kwargs["actions"].shape, device=self.device)], dim=2)
@@ -51,15 +50,12 @@ class DecisionTransformer(nn.Module):
 
         return e.clone()
 
-    def loss(self, actions, probs, rtgs):
+    def loss(self, actions, log_probs, rtgs):
         total_return = rtgs.max() # rtgs - rtgs.mean()
         return -(probs * total_return).sum() + actions.abs().sum()
 
-    def train_iter(self, hist):
-        self.optim.zero_grad()
-
-        # do it right
-        loss = self.loss(hist.actions, hist.probs, hist.rtgs)
+    def train_iter(self, states, acts, log_probs, old_log_probs, gaes):
+        loss = self.loss(acts, probs, hist.rtgs)
 
         loss.backward()
         self.optim.step()
