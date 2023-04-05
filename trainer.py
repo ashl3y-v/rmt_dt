@@ -1,6 +1,44 @@
-import torch
+import os
+import torch as T
 from torch import nn
+from torch.nn import functional as F
 from torch import optim
+import numpy as np
+
+class OUActionNoise(object):
+    def __init__(self, mu, sigma=0.15, theta=0.2, dt=1E-2, x0=None):
+        self.mu = mu
+        self.sigma = sigma
+        self.theta = theta
+        self.dt = dt
+        self.x0 = x0
+        
+        self.reset()
+
+    def __call__(self):
+        x = self.x_previous + self.theta * (self.mu - self.x_prev) * self.dt + self.sigma * np.sqrt(self.dt) * np.random.normal(size=self.mu.shape)
+        self.x_prev = x
+        return x
+
+    def reset(self):
+        self.x_prev = self.x0 if self.x0 is not None else np.zeros_like(self.mu)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 class PPOTrainer():
     def __init__(self, actor, critic, ppo_clip_val=0.2, target_kl_div=0.01, max_policy_train_iters=80, value_train_iters=80, policy_lr=3E-4, value_lr=1E-2):

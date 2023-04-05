@@ -5,10 +5,6 @@ from torch.distributions import Normal
 import transformers
 from dt import DecisionTransformer
 
-model = DecisionTransformer()
+a = 5
 
-i = torch.randn([1, 5, 775])
-
-r = model(inputs_embeds=i)
-
-print(r.rhape)
+print(type(a) == type(0))

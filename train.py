@@ -44,9 +44,6 @@ for e in range(EPOCHS):
     terminated = truncated = False
     while not (terminated or truncated):
         state_pred, action_pred, rtg_pred = hist.predict(model, attention_mask)
-        dist = model.action_dist(action_pred)
-        action = dist.rsample().reshape([1, 1, act_dim])
-        prob = dist.log_prob(action)
 
         # action = action_pred.detach().squeeze().cpu().numpy()
         observation, reward, terminated, truncated, info = env.step(action.detach().squeeze().cpu().numpy())

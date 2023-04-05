@@ -1,12 +1,11 @@
-import torch
+import os
+import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import transformers
-
 
 class Critic(nn.Module):
-    def __init__(self, state_dim=768, act_dim=3, reward_dim=1, nhead=3, dtype=torch.float32, device="cpu"):
+    def __init__(self, state_dim=768, act_dim=3, reward_dim=1, fc_size=500, lr=3E-4, name="critic", chkpt_dir="tmp/ddpg", dtype=T.float32, device="cpu"):
         super().__init__()
         self.dtype = dtype
         self.device = device
@@ -14,18 +13,29 @@ class Critic(nn.Module):
         self.state_dim = state_dim
         self.act_dim = act_dim
         self.reward_dim = reward_dim
-        self.nhead = nhead
 
-        encoder_layer = nn.TransformerEncoderLayer(d_model=state_dim + act_dim, nhead=nhead).to(dtype=dtype, device=device)
-        self.transformer = nn.TransformerEncoder(encoder_layer=encoder_layer, num_layers=6).to(dtype=dtype, device=device)
-        self.get_reward = nn.Linear(state_dim + act_dim, 1).to(dtype=dtype, device=device)
+        self.checkpoint_file = os.path.join(chkpt_dir, name+"_ddpg")
+
+        self.input_state = nn.Linear(state_dim, fc_size)
+        self.input_action = nn.Linear(act_dim, fc_size)
+        self.linear_1 = nn.Linear(fc_size, fc_size)
+        self.linear_2 = nn.Linear(fc_size, fc_size)
+        self.linear_3 = nn.Linear(fc_size, fc_size)
+        self.linear_4 = nn.Linear(fc_size, reward_dim)
 
         self.l2_loss = nn.MSELoss()
-        self.optim = torch.optim.AdamW(self.parameters(), lr=0.075)
+        self.optim = T.optim.RAdam(self.parameters(), lr=lr)
 
-    def forward(self, x):
-        x = self.transformer(x)
-        x = self.get_reward(x)
+        self.to(self.device)
+
+    def forward(self, s, a):
+        x = F.relu(F.normalize(self.input_state(s))) + F.relu(F.normalize(self.input_action(a)))
+        x = x + self.linear_1(x)
+        x = F.dropout(x, p=0.25)
+        x = x + F.relu(F.normalize(x + self.linear_2(x)))
+        x = x + F.relu(F.normalize(self.linear_3(x)))
+        x = F.dropout(x, p=0.25)
+        x = self.linear_4(x)
 
         return x
 
@@ -41,3 +51,11 @@ class Critic(nn.Module):
         self.optim.step()
 
         return loss
+
+    def save(self):
+        print("Saving critic")
+        T.save(self.state_dict(), self.checkpoint_file)
+
+    def load(self):
+        print("Loading critic")
+        self.load_state_dict(T.load(self.checkpoint_file))
