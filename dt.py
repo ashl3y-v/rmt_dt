@@ -17,8 +17,8 @@ class DecisionTransformer(nn.Module):
         self.act_dim = act_dim
         self.min_action = min_action
         self.max_action = max_action
-        self.mean_action = (self.max_action + self.min_action) / 2
-        self.scale_action = (self.max_action - self.min_action) / 2
+        self.mean_action = (max_action + min_action) / 2
+        self.scale_action = (max_action - min_action) / 2
 
         self.name = name
         self.checkpoint_file = os.path.join(chkpt_dir, name+"_ddpg")
@@ -48,24 +48,15 @@ class DecisionTransformer(nn.Module):
 
         return action, prob
 
-    def action_dist(self, action_preds):
-        mid = int(action_preds.shape[-1] / 2)
-        return Normal(loc=action_preds[:, :, :mid], scale=torch.maximum(action_preds[:, :, mid:], torch.fill(action_preds[:, :, mid:], 0.01)))
+    def gamma_noise(self):
+        pass
 
-    def prob(self, dist, actions):
-        return dist.log_prob(actions)
+    # def action_dist(self, action_preds):
+    #     mid = int(action_preds.shape[-1] / 2)
+    #     return Normal(loc=action_preds[:, :, :mid], scale=torch.maximum(action_preds[:, :, mid:], torch.fill(action_preds[:, :, mid:], 0.01)))
 
-    def loss(self, actions, log_probs, rtgs):
-        total_return = rtgs.max() # rtgs - rtgs.mean()
-        return -(probs * total_return).sum() + actions.abs().sum()
-
-    def train_iter(self, states, acts, log_probs, old_log_probs, gaes):
-        loss = self.loss(acts, probs, hist.rtgs)
-
-        loss.backward()
-        self.optim.step()
-
-        return loss
+    # def prob(self, dist, actions):
+    #     return dist.log_prob(actions)
 
     def save(self):
         print("Saving critic")
