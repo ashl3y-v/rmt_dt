@@ -1,61 +1,51 @@
-import os
 import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
 
 class Critic(nn.Module):
-    def __init__(self, state_dim=768, act_dim=3, reward_dim=1, fc_size=500, lr=3E-4, name="critic", chkpt_dir="tmp/ddpg", dtype=T.float32, device="cpu"):
+    def __init__(self, state_dim=768, act_dim=3, fc_size=250, n_layers=5, file="critic.pt", dtype=T.float32, device="cpu"):
         super().__init__()
         self.dtype = dtype
         self.device = device
+        
+        self.file = file
 
         self.state_dim = state_dim
         self.act_dim = act_dim
-        self.reward_dim = reward_dim
 
-        self.checkpoint_file = os.path.join(chkpt_dir, name+"_ddpg")
+        self.bn_0 = nn.BatchNorm1d(num_features=fc_size)
+        self.input = nn.Linear(state_dim + act_dim, fc_size)
 
-        self.input_state = nn.Linear(state_dim, fc_size)
-        self.input_action = nn.Linear(act_dim, fc_size)
-        self.linear_1 = nn.Linear(fc_size, fc_size)
-        self.linear_2 = nn.Linear(fc_size, fc_size)
-        self.linear_3 = nn.Linear(fc_size, fc_size)
-        self.linear_4 = nn.Linear(fc_size, reward_dim)
+        linear_layers = [
+            nn.Linear(fc_size, fc_size),
+            nn.Dropout(p=0.5),
+            nn.BatchNorm1d(fc_size),
+            nn.Mish()
+        ] * n_layers
+        self.linears = nn.Sequential(*linear_layers)
 
-        self.l2_loss = nn.MSELoss()
-        self.optim = T.optim.RAdam(self.parameters(), lr=lr)
+        self.output = nn.Linear(fc_size, 1)
 
         self.to(self.device)
 
     def forward(self, s, a):
-        x = F.relu(F.normalize(self.input_state(s))) + F.relu(F.normalize(self.input_action(a)))
-        x = x + self.linear_1(x)
-        x = F.dropout(x, p=0.25)
-        x = x + F.relu(F.normalize(x + self.linear_2(x)))
-        x = x + F.relu(F.normalize(self.linear_3(x)))
-        x = F.dropout(x, p=0.25)
-        x = self.linear_4(x)
+        s = s.squeeze()
+        a = a.squeeze()
+
+        x = T.cat([s, a], dim=-1)
+        x = self.input(x)
+        x = self.bn_0(x)
+
+        x = self.linears(x)
+
+        x = self.output(x)
 
         return x
 
-    def loss(self, rtgs, rtg_preds):
-        return self.l2_loss(rtgs.squeeze(), rtg_preds.squeeze())
-
-    def train_iter(self, rtgs, rtg_preds):
-        self.optim.zero_grad()
-
-        loss = self.loss(rtgs, rtg_preds)
-
-        loss.backward()
-        self.optim.step()
-
-        return loss
-
     def save(self):
         print("Saving critic")
-        T.save(self.state_dict(), self.checkpoint_file)
+        T.save(self.state_dict(), self.file)
 
     def load(self):
         print("Loading critic")
-        self.load_state_dict(T.load(self.checkpoint_file))
+        self.load_state_dict(T.load(self.file))

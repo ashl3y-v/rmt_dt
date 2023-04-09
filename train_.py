@@ -11,7 +11,6 @@ class Trainer():
 
         self.model = model
 
-        self.l2_loss = nn.MSELoss()
         self.optim = torch.optim.AdamW(model.parameters(), lr=lr)
 
     def train(self, epochs, training_epochs):

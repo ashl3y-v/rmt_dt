@@ -42,7 +42,6 @@ state_preds, action_preds, return_preds = model(
 print(states.shape, actions.shape, rtgs.shape)
 print(state_preds.shape, action_preds.shape, return_preds.shape)
 
-l2_loss = nn.MSELoss()
 optim = torch.optim.AdamW(model.parameters(), lr=0.001)
 
 for i in range(1000):

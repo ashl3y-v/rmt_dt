@@ -1,0 +1,8 @@
+decaying learning rate
+loop, check what lookeadhead is
+compression
+gaussian policy stdev (make product of modle)
+covariance matrix
+make RTG be RTG/steps
+
+do the vitmae thing

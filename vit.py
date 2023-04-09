@@ -1,4 +1,3 @@
-import os
 import torch as T
 import torch.nn as nn
 import torch.optim as optim
@@ -23,9 +22,9 @@ class ViT(nn.Module):
     def forward(self, o):
         with T.inference_mode():
             o = T.from_numpy(o).to(dtype=self.dtype, device=self.device).reshape(self.image_dim)
-            o = self.image_processor(o, return_tensors="pt").pixel_values.to(device=self.device)
+            o = self.image_processor(o, return_tensors="pt").pixel_values.to(dtype=self.dtype, device=self.device)
             e = self.vit(o).to_tuple()
             e = e[1].unsqueeze(0)
 
-        # was cloned, needed?
-        return e
+        # needed
+        return e.clone()

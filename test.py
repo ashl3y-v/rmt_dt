@@ -5,6 +5,6 @@ from torch.distributions import Normal
 import transformers
 from dt import DecisionTransformer
 
-a = 5
+a = [nn.Linear(10, 10)]
 
-print(type(a) == type(0))
+print(a * 5)

@@ -55,7 +55,7 @@ class ReplayBuffer():
         return total_reward
 
 
-def init_replay_buffer(state, act_dim, state_dim, TARGET_RETURN=10000, dtype=T.float32, device="cpu"):
+def init_replay_buffer(state, act_dim, state_dim, TARGET_RETURN=9999, dtype=T.float32, device="cpu"):
     actions = T.zeros([1, 1, act_dim], device=device, dtype=dtype)
     rewards = T.zeros(1, 1, device=device, dtype=dtype)
 
