@@ -1,37 +1,25 @@
 import torch as T
 from torch import nn
 from torch.nn import functional as F
-from torch import optim
+import torch.optim.lr_scheduler as lr_scheduler
+from pytorch_optimizer import Ranger21
 
 class Trainer(nn.Module):
-    def __init__(self, actor_params, critic_params, lr_actor=3E-4, lr_critic=3E-4):
+    def __init__(self, params, lr=3E-4, iterations=1000):
         super().__init__()
-        self.actor_optim = optim.AdamW(actor_params, lr=lr_actor, amsgrad=True)
+        self.optim = Ranger21(params, num_iterations=iterations, lr=lr) # optim.AdamW(params, lr=max_lr, amsgrad=True)
+        # self.lr_scheduler = lr_scheduler.CyclicLR(self.optim, base_lr, max_lr)
 
-        self.critic_optim = optim.AdamW(critic_params, lr=lr_critic, amsgrad=True)
+        self.mse_loss = nn.MSELoss(reduction='mean')
 
-        self.critic_mse_loss = nn.MSELoss(reduction='mean')
+    def loss(self, R_preds, Rs):
+        return -Rs.mean() + self.mse_loss(R_preds.squeeze(), Rs.squeeze())
 
-    def actor_loss(self, Qs):
-        return -Qs.mean()
+    def learn(self, replay_buffer):
+        self.optim.zero_grad()
+        loss = self.loss(replay_buffer.R_preds, replay_buffer.Rs)
+        loss.backward()
+        self.optim.step()
 
-    def critic_loss(self, Qs, rtgs):
-        return self.critic_mse_loss(Qs.squeeze(), rtgs.squeeze())
-
-    def learn(self, actor, critic, replay_buffer):
-        Qs = critic(replay_buffer.states, replay_buffer.actions)
-
-        actor.eval()
-        self.critic_optim.zero_grad()
-        critic_loss = self.critic_loss(Qs, replay_buffer.rtgs)
-        critic_loss.backward(retain_graph=True)
-        self.critic_optim.step()
-
-        actor.train()
-        self.actor_optim.zero_grad()
-        actor_loss = self.actor_loss(Qs)
-        actor_loss.backward()
-        self.actor_optim.step()
-
-        return critic_loss, actor_loss
+        return loss
 

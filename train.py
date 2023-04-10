@@ -15,7 +15,7 @@ from vit import ViT
 from trainer import Trainer
 from utils import init_env, reset_env
 
-# torch.autograd.set_detect_anomaly(True)
+T.manual_seed(23)
 
 # this probably does nothing
 T.backends.cudnn.benchmark = True
@@ -32,13 +32,9 @@ parser = argparse.ArgumentParser(
                     epilog='Made by Ashley :)')
 
 parser.add_argument('-t', '--timesteps', default=1000)      # option that takes a value
-parser.add_argument('-la', '--load_actor',
+parser.add_argument('-lm', '--load_model',
                     action='store_true')  # on/off flag
-parser.add_argument('-lc', '--load_critic',
-                    action='store_true')  # on/off flag
-parser.add_argument('-sa', '--save_actor',
-                    action='store_true')  # on/off flag
-parser.add_argument('-sc', '--save_critic',
+parser.add_argument('-sm', '--save_model',
                     action='store_true')  # on/off flag
 
 args = parser.parse_args()
@@ -59,17 +55,13 @@ n_positions = 8192
 
 env, obs_dim, image_dim, act_dim = init_env(env_name)
 
-actor = DecisionTransformer(state_dim=state_dim, act_dim=act_dim, n_positions=n_positions, stdev=0.03, dtype=dtype, device=device)
-if args.load_actor:
-    actor.load()
-
-critic = Critic(state_dim=state_dim, act_dim=act_dim, fc_size=500, dtype=dtype, device=device)
-if args.load_critic:
-    critic.load()
+model = DecisionTransformer(state_dim=state_dim, act_dim=act_dim, n_positions=n_positions, stdev=0.03, dtype=dtype, device=device)
+if args.load_model:
+    model.load()
 
 vit = ViT(image_dim=image_dim, dtype=dtype, device=device)
 
-trainer = Trainer(actor.parameters(), critic.parameters(), lr_actor=3E-4, lr_critic=1E-3)
+trainer = Trainer(model.parameters(), lr=3E-4)
 
 for e in range(EPOCHS):
     T.cuda.empty_cache()
@@ -78,11 +70,11 @@ for e in range(EPOCHS):
 
     terminated = truncated = False
     while not (terminated or truncated):
-        state_pred, action_pred, rtg_pred = replay_buffer.predict(actor, attention_mask)
+        state_pred, action, R_pred = replay_buffer.predict(model, attention_mask)
 
         # think about n frame-length actions
-        action = actor.sample(action_pred)
-        action_np = action.detach().squeeze().cpu().numpy()
+        action_sample = model.sample(action)
+        action_np = action_sample.detach().squeeze().cpu().numpy()
 
         for _ in range(steps_per_action):
             observation, reward, terminated, truncated, info = env.step(action_np)
@@ -91,7 +83,7 @@ for e in range(EPOCHS):
 
         reward = T.tensor(reward, device=device, requires_grad=False).reshape([1, 1])
 
-        replay_buffer.append(state, action, reward, rtg_pred)
+        replay_buffer.append(state, action, reward, R_pred)
 
         attention_mask = T.cat([attention_mask, T.ones([1, 1], device=device)])
 
@@ -107,16 +99,14 @@ for e in range(EPOCHS):
         if replay_buffer.states.shape[1] == n_positions:
             terminated = True
 
-    # update rtgs
-    total_reward = replay_buffer.rtg_update()
+    # update Rs
+    total_reward = replay_buffer.R_update()
 
     # train (also do it right)
-    critic_loss, actor_loss = trainer.learn(critic, replay_buffer)
+    loss = trainer.learn(replay_buffer)
 
-    print(e, "critic_loss:", critic_loss.item(), "actor_loss:", actor_loss.item(), "total_reward:", total_reward.item())
+    print(e, "loss:", loss.item(), "total_reward:", total_reward.item())
 
     if e % 50 == 0:
-        if args.save_actor:
-            actor.save()
-        if args.save_critic:
-            critic.save()
+        if args.save_model:
+            model.save()

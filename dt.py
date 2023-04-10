@@ -1,6 +1,5 @@
 import torch as T
 import torch.nn as nn
-from torch.distributions import Normal
 import transformers
 
 
@@ -18,17 +17,13 @@ class DecisionTransformer(nn.Module):
         self.stdev = stdev
 
         # crashes if length is greater than n_positions
-        config = transformers.DecisionTransformerConfig(state_dim=state_dim, act_dim=act_dim, n_positions=n_positions, n_layer=n_layers, n_head=n_heads)
+        config = transformers.DecisionTransformerConfig(state_dim=state_dim, act_dim=act_dim+act_dim**2, n_positions=n_positions, n_layer=n_layers, n_head=n_heads)
         self.transformer = transformers.DecisionTransformerModel(config)
 
         self.to(dtype=dtype, device=device)
 
     def forward(self, *args, **kwargs):
-        # outdated, padding act from x to 2x
-        # kwargs["actions"] = T.cat([kwargs["actions"], T.zeros(kwargs["actions"].shape, device=self.device)], dim=2)
-
-        state_pred, action_pred, rtg_pred = self.transformer(*args, **kwargs)
-        return state_pred, action_pred, rtg_pred
+        return self.transformer(*args, **kwargs)
 
     def sample(self, action_pred):
         dist = self.gaussian(action_pred)
@@ -37,7 +32,9 @@ class DecisionTransformer(nn.Module):
         return action
 
     def gaussian(self, action_pred):
-        return Normal(loc=action_pred, scale=T.fill(action_pred, self.stdev))
+        mu = action_pred[:, :self.act_dim, :]
+        cov = action_pred[:, self.act_dim:, :].reshape(self.act_dim, self.act_dim)
+        return T.distributions.MultivariateNormal(loc=mu, covariance_matrix=cov)
 
     def save(self):
         print("Saving critic")
