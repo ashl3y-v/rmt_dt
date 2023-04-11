@@ -15,7 +15,7 @@ from vit import ViT
 from trainer import Trainer
 from utils import init_env, reset_env
 
-T.manual_seed(1)
+T.manual_seed(42)
 
 # this probably does nothing
 T.backends.cudnn.benchmark = True
@@ -31,7 +31,7 @@ parser = argparse.ArgumentParser(
                     description='Does it',
                     epilog='Made by Ashley :)')
 
-parser.add_argument('-t', '--timesteps', default=1000)      # option that takes a value
+parser.add_argument('-t', '--timesteps', default=100)      # option that takes a value
 parser.add_argument('-lm', '--load_model',
                     action='store_true')  # on/off flag
 parser.add_argument('-sm', '--save_model',
@@ -56,12 +56,13 @@ n_positions = 8192
 env, obs_dim, image_dim, act_dim = init_env(env_name)
 
 model = DecisionTransformer(state_dim=state_dim, act_dim=act_dim, n_positions=n_positions, stdev=0.03, dtype=dtype, device=device)
+
 if args.load_model:
     model.load()
 
 vit = ViT(image_dim=image_dim, dtype=dtype, device=device)
 
-trainer = Trainer(model.parameters(), max_lr=0.25)
+trainer = Trainer(model.parameters(), epochs=EPOCHS)
 
 for e in range(EPOCHS):
     T.cuda.empty_cache()
