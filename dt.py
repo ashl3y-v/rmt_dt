@@ -23,23 +23,31 @@ class DecisionTransformer(nn.Module):
         self.to(dtype=dtype, device=device)
 
     def forward(self, *args, **kwargs):
-        return self.transformer(*args, **kwargs)
+        cov_pad = T.zeros([kwargs["actions"].shape[-3], kwargs["actions"].shape[-2], self.act_dim**2], device=self.device)
+        kwargs["actions"] = T.cat([kwargs["actions"], cov_pad], dim=-1)
 
-    def sample(self, action_pred):
-        dist = self.gaussian(action_pred)
+        state_preds, action_preds, reward_preds = self.transformer(*args, **kwargs)
+        return state_preds, action_preds, reward_preds
+
+    def split(self, actions):
+        mu = actions[0, :, :self.act_dim]
+        cov = actions[0, :, self.act_dim:].reshape(self.act_dim, self.act_dim)
+        cov = T.abs(cov @ cov.t()).unsqueeze(0)
+
+        return mu, cov
+
+    def sample(self, actions):
+        mu, cov = self.split(actions)
+        dist = self.gaussian(mu, cov)
         action = dist.rsample().reshape([1, 1, self.act_dim])
 
         return action
 
-    def gaussian(self, action_pred):
-        mu = action_pred[:, :self.act_dim, :]
-        cov = action_pred[:, self.act_dim:, :].reshape(self.act_dim, self.act_dim)
+    def gaussian(self, mu, cov):
         return T.distributions.MultivariateNormal(loc=mu, covariance_matrix=cov)
 
     def save(self):
-        print("Saving critic")
         T.save(self.state_dict(), self.file)
 
     def load(self):
-        print("Loading critic")
         self.load_state_dict(T.load(self.file))

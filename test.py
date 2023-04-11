@@ -7,24 +7,30 @@ from pytorch_optimizer import Ranger21
 
 T.manual_seed(42)
 
-EPOCHS = 10000
+# EPOCHS = 10000
+#
+# model = nn.Linear(100, 100)
+# optim = T.optim.AdamW(model.parameters(), lr=1E-5)
+# lr_scheduler = T.optim.lr_scheduler.ExponentialLR(optim, gamma=0.9)
+#
+# x = T.ones([100])
+# y = T.randn([100])
+#
+# losses = T.tensor([])
+#
+# for i in range(EPOCHS):
+#     y_pred = model(x)
+#     loss = ((y - y_pred) ** 2).sum()
+#     loss.backward()
+#     for _ in range(80):
+#         optim.step()
+#
+#     losses = T.cat([losses, loss])
 
-model = nn.Linear(100, 100)
-optim = T.optim.AdamW(model.parameters(), lr=1E-5)
-lr_scheduler = T.optim.lr_scheduler.ExponentialLR(optim, gamma=0.9)
+mse = nn.MSELoss()
 
-x = T.ones([100])
-y = T.randn([100])
+a = T.ones([10])
+b = T.fill(a, 100)
 
-losses = T.tensor([])
-
-for i in range(EPOCHS):
-    y_pred = model(x)
-    loss = ((y - y_pred) ** 2).sum()
-    loss.backward()
-    for _ in range(80):
-        optim.step()
-
-    losses = T.cat([losses, loss])
-
-print(losses)
+loss = mse(a, b)
+print(loss)

@@ -15,7 +15,7 @@ from vit import ViT
 from trainer import Trainer
 from utils import init_env, reset_env
 
-T.manual_seed(23)
+T.manual_seed(1)
 
 # this probably does nothing
 T.backends.cudnn.benchmark = True
@@ -61,7 +61,7 @@ if args.load_model:
 
 vit = ViT(image_dim=image_dim, dtype=dtype, device=device)
 
-trainer = Trainer(model.parameters(), lr=3E-4)
+trainer = Trainer(model.parameters(), max_lr=0.25)
 
 for e in range(EPOCHS):
     T.cuda.empty_cache()
@@ -70,11 +70,11 @@ for e in range(EPOCHS):
 
     terminated = truncated = False
     while not (terminated or truncated):
-        state_pred, action, R_pred = replay_buffer.predict(model, attention_mask)
+        state_pred, action_pred, R_pred = replay_buffer.predict(model, attention_mask)
 
         # think about n frame-length actions
-        action_sample = model.sample(action)
-        action_np = action_sample.detach().squeeze().cpu().numpy()
+        action = model.sample(action_pred)
+        action_np = action.detach().squeeze().cpu().numpy()
 
         for _ in range(steps_per_action):
             observation, reward, terminated, truncated, info = env.step(action_np)
@@ -100,12 +100,12 @@ for e in range(EPOCHS):
             terminated = True
 
     # update Rs
-    total_reward = replay_buffer.R_update()
+    total_reward, av_r = replay_buffer.R_update()
 
     # train (also do it right)
-    loss = trainer.learn(replay_buffer)
+    P_loss, R_loss = trainer.learn(replay_buffer)
 
-    print(e, "loss:", loss.item(), "total_reward:", total_reward.item())
+    print(e, "P_loss:", P_loss.item(), "R_loss:", R_loss.item(), "total_reward:", total_reward.item(), "average return", av_r.item())
 
     if e % 50 == 0:
         if args.save_model:
