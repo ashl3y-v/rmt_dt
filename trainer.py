@@ -4,7 +4,7 @@ from torch.nn import functional as F
 import torch.optim.lr_scheduler as lr_scheduler
 
 class Trainer(nn.Module):
-    def __init__(self, params, max_lr=1E-3, steps_P=1, steps_R=1, epochs=100):
+    def __init__(self, params, max_lr=1E-3, steps_P=1, steps_R=3, epochs=100):
         super().__init__()
 
         self.steps_P = steps_P
@@ -23,10 +23,10 @@ class Trainer(nn.Module):
             self.optim.step()
             self.lr_scheduler.step()
 
-        self.optim.zero_grad()
-        P_loss = -replay_buffer.R_preds.mean()
-        P_loss.backward()
-        # for _ in range(self.steps_P):
-        self.optim.step()
+        for _ in range(self.steps_P):
+            self.optim.zero_grad()
+            P_loss = -replay_buffer.R_preds.mean()
+            P_loss.backward()
+            self.optim.step()
 
         return P_loss, R_loss

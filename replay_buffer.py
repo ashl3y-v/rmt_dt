@@ -57,6 +57,8 @@ class ReplayBuffer():
         # print("total_reward", total_reward)
         return total_reward, av_r
 
+    def compress(self):
+        pass
 
 def init_replay_buffer(state, act_dim, state_dim, TARGET_RETURN=9999, dtype=T.float32, device="cpu"):
     actions = T.zeros([1, 1, act_dim], device=device, dtype=dtype)
