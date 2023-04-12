@@ -30,3 +30,10 @@ def reset_env(
     attention_mask = T.zeros(1, 1, device=device, dtype=dtype)
 
     return replay_buffer, attention_mask
+
+def mean_range(contents, first, second, dim=0):
+    before, inside, after = T.tensor_split(contents, (first, second), dim=dim)
+
+    inside = inside.mean(dim=dim, keepdim=True)
+
+    return T.cat([before, inside, after], dim=dim)

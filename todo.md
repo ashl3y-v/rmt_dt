@@ -1,10 +1,11 @@
 - [x] `rtg_preds` are critic
 - [x] Decaying learning rate
 - [x] Loop, check what Lookahead is
-- [ ] Compression
+- [ ] Compression (have to change attention mask, make explicitly size of history)
 - [x] Gaussian policy stdev (make product of model)
 - [x] Covariance matrix
 - [x] Make RTG be RTG/steps
 - [ ] Getting random NaNs in loc
+- [ ] R_pred only sees past states and actions, perhaps take last as critic value
 
 - [ ] do the vitmae thing

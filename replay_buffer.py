@@ -22,7 +22,7 @@ class ReplayBuffer(nn.Module):
         self.rewards = rewards
         self.R_preds = R_preds
 
-        if type(timestep) == type(0):
+        if isinstance(timestep, int):
             self.timestep = T.tensor(timestep, device=device, dtype=T.long).reshape(
                 1, 1
             )
@@ -87,8 +87,21 @@ class ReplayBuffer(nn.Module):
         # print("total_reward", total_reward)
         return total_reward, av_r
 
+    def compress_seq(self, seq, dim=0):
+        n_blocks = (seq.shape[dim] - self.max_length) // self.block_size
+        blocks = seq[: self.block_size * n_blocks, :]
+        seq = seq[self.block_size * n_blocks :, :]
+        blocks = T.stack(T.split(blocks, self.block_size), dim=0)
+        compressed = blocks.mean(dim=dim)
+
+        return T.cat([compressed, seq])
+
     def compress(self):
-        pass
+        if self.length() > self.max_size:
+            self.states = self.compress_seq(self.states)
+            self.actions = self.compress_seq(self.actions)
+            self.rewards = self.compress_seq(self.rewards)
+            self.R_preds = self.compress_seq(self.R_preds)
 
 
 def init_replay_buffer(
