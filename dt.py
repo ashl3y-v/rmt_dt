@@ -4,7 +4,18 @@ import transformers
 
 
 class DecisionTransformer(nn.Module):
-    def __init__(self, state_dim=768, act_dim=3, n_layers=3, n_heads=4, stdev=0.01, n_positions=8192, file="actor.pt", dtype=T.float32, device="cpu"):
+    def __init__(
+        self,
+        state_dim=768,
+        act_dim=3,
+        n_layers=3,
+        n_heads=4,
+        stdev=0.01,
+        n_positions=8192,
+        file="actor.pt",
+        dtype=T.float32,
+        device="cpu",
+    ):
         super().__init__()
         self.dtype = dtype
         self.device = device
@@ -17,21 +28,34 @@ class DecisionTransformer(nn.Module):
         self.stdev = stdev
 
         # crashes if length is greater than n_positions
-        config = transformers.DecisionTransformerConfig(state_dim=state_dim, act_dim=act_dim+act_dim**2, n_positions=n_positions, n_layer=n_layers, n_head=n_heads)
+        config = transformers.DecisionTransformerConfig(
+            state_dim=state_dim,
+            act_dim=act_dim + act_dim**2,
+            n_positions=n_positions,
+            n_layer=n_layers,
+            n_head=n_heads,
+        )
         self.transformer = transformers.DecisionTransformerModel(config)
 
         self.to(dtype=dtype, device=device)
 
     def forward(self, *args, **kwargs):
-        cov_pad = T.zeros([kwargs["actions"].shape[-3], kwargs["actions"].shape[-2], self.act_dim**2], device=self.device)
+        cov_pad = T.zeros(
+            [
+                kwargs["actions"].shape[-3],
+                kwargs["actions"].shape[-2],
+                self.act_dim**2,
+            ],
+            device=self.device,
+        )
         kwargs["actions"] = T.cat([kwargs["actions"], cov_pad], dim=-1)
 
         state_preds, action_preds, reward_preds = self.transformer(*args, **kwargs)
         return state_preds, action_preds, reward_preds
 
     def split(self, actions):
-        mu = actions[0, :, :self.act_dim]
-        cov = actions[0, :, self.act_dim:].reshape(self.act_dim, self.act_dim)
+        mu = actions[0, :, : self.act_dim]
+        cov = actions[0, :, self.act_dim :].reshape(self.act_dim, self.act_dim)
         cov = T.abs(cov @ cov.t()).unsqueeze(0)
 
         return mu, cov

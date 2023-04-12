@@ -5,7 +5,7 @@ from torch import nn
 from numpy.random import choice
 
 
-class Trainer():
+class Trainer:
     def __init__(self, model, lr=0.001, device="cpu"):
         self.device = device
 
@@ -34,12 +34,18 @@ class Trainer():
                     rewards=e.rewards[:n],
                     returns_to_go=e.target_returns[:n],
                     timesteps=torch.tensor(beg + n, device=self.device),
-                    attention_mask=torch.zeros(1, n, device=self.device, dtype=torch.float32),
+                    attention_mask=torch.zeros(
+                        1, n, device=self.device, dtype=torch.float32
+                    ),
                     return_dict=False,
                 )
 
                 self.optim.zero_grad()
-                loss = -torch.log(step.rtg * action_preds.sum()) + self.l2_loss(step.state, state_preds) + self.l2_loss(step.rtg, return_preds)
+                loss = (
+                    -torch.log(step.rtg * action_preds.sum())
+                    + self.l2_loss(step.state, state_preds)
+                    + self.l2_loss(step.rtg, return_preds)
+                )
 
                 loss.backward()
                 self.optim.step()

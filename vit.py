@@ -13,16 +13,24 @@ class ViT(nn.Module):
         self.device = device
 
         model_ckpt = "microsoft/beit-base-patch16-224-pt22k-ft22k"
-        self.image_dim=image_dim
-        self.image_processor = transformers.AutoImageProcessor.from_pretrained(model_ckpt, do_resize=True, device=device)
+        self.image_dim = image_dim
+        self.image_processor = transformers.AutoImageProcessor.from_pretrained(
+            model_ckpt, do_resize=True, device=device
+        )
         self.vit = transformers.BeitModel.from_pretrained(model_ckpt)
 
         self.to(dtype=dtype, device=device)
 
     def forward(self, o):
         with T.inference_mode():
-            o = T.from_numpy(o).to(dtype=self.dtype, device=self.device).reshape(self.image_dim)
-            o = self.image_processor(o, return_tensors="pt").pixel_values.to(dtype=self.dtype, device=self.device)
+            o = (
+                T.from_numpy(o)
+                .to(dtype=self.dtype, device=self.device)
+                .reshape(self.image_dim)
+            )
+            o = self.image_processor(o, return_tensors="pt").pixel_values.to(
+                dtype=self.dtype, device=self.device
+            )
             e = self.vit(o).to_tuple()
             e = e[1].unsqueeze(0)
 

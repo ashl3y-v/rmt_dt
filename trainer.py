@@ -3,15 +3,18 @@ from torch import nn
 from torch.nn import functional as F
 import torch.optim.lr_scheduler as lr_scheduler
 
+
 class Trainer(nn.Module):
-    def __init__(self, params, max_lr=1E-3, steps_P=1, steps_R=3, epochs=100):
+    def __init__(self, params, max_lr=1e-3, steps_P=1, steps_R=3, epochs=100):
         super().__init__()
 
         self.steps_P = steps_P
         self.steps_R = steps_R
 
         self.optim = T.optim.AdamW(params, lr=0)
-        self.lr_scheduler = lr_scheduler.OneCycleLR(self.optim, max_lr=max_lr, epochs=epochs, steps_per_epoch=steps_P+steps_R)
+        self.lr_scheduler = lr_scheduler.OneCycleLR(
+            self.optim, max_lr=max_lr, epochs=epochs, steps_per_epoch=steps_P + steps_R
+        )
 
         self.huber = nn.HuberLoss(delta=1)
 

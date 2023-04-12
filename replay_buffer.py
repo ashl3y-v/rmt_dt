@@ -1,8 +1,19 @@
 import torch as T
+from torch import nn
 
 
-class ReplayBuffer():
-    def __init__(self, states, actions, rewards, R_preds, timestep=0, dtype=T.float32, device="cpu"):
+class ReplayBuffer(nn.Module):
+    def __init__(
+        self,
+        states,
+        actions,
+        rewards,
+        R_preds,
+        timestep=0,
+        max_size=150,
+        dtype=T.float32,
+        device="cpu",
+    ):
         self.device = device
         self.dtype = dtype
 
@@ -12,11 +23,28 @@ class ReplayBuffer():
         self.R_preds = R_preds
 
         if type(timestep) == type(0):
-            self.timestep = T.tensor(timestep, device=device, dtype=T.long).reshape(1, 1)
+            self.timestep = T.tensor(timestep, device=device, dtype=T.long).reshape(
+                1, 1
+            )
         else:
             self.timestep = timestep.to(dtype=T.long, device=device).reshape(1, 1)
 
-    def predict(self, model, attention_mask): # use attention_mask
+        self.block_size = 10
+        self.max_size = max_size
+        self.compressor = nn.Conv1d(
+            self.block_size,
+            1,
+            kernel_size=self.block_size,
+            padding=(self.block_size // 2),
+        )
+        self.decompressor = nn.ConvTranspose1d(
+            1,
+            self.block_size,
+            kernel_size=self.block_size,
+            padding=(self.block_size // 2),
+        )
+
+    def predict(self, model, attention_mask):  # use attention_mask
         # with torch.inference_mode():
         state_preds, action_preds, R_preds = model(
             states=self.states,
@@ -40,7 +68,9 @@ class ReplayBuffer():
 
         self.R_preds = T.cat([self.R_preds, R_pred], dim=1)
 
-        self.timestep = self.timestep + T.tensor(timestep_delta, device=self.device, dtype=T.long).reshape(1, 1)
+        self.timestep = self.timestep + T.tensor(
+            timestep_delta, device=self.device, dtype=T.long
+        ).reshape(1, 1)
 
     def length(self):
         return self.states.shape[1]
@@ -60,7 +90,10 @@ class ReplayBuffer():
     def compress(self):
         pass
 
-def init_replay_buffer(state, act_dim, state_dim, TARGET_RETURN=9999, dtype=T.float32, device="cpu"):
+
+def init_replay_buffer(
+    state, act_dim, state_dim, TARGET_RETURN=9999, dtype=T.float32, device="cpu"
+):
     actions = T.zeros([1, 1, act_dim], device=device, dtype=dtype)
     rewards = T.zeros(1, 1, device=device, dtype=dtype)
 

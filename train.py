@@ -27,15 +27,12 @@ T.autograd.set_detect_anomaly(True)
 # use automatic mixed precision (however that works)
 
 parser = argparse.ArgumentParser(
-                    prog='Train Decision Transformer',
-                    description='Does it',
-                    epilog='Made by Ashley :)')
+    prog="Train Decision Transformer", description="Does it", epilog="Made by Ashley :)"
+)
 
-parser.add_argument('-t', '--timesteps', default=100)      # option that takes a value
-parser.add_argument('-lm', '--load_model',
-                    action='store_true')  # on/off flag
-parser.add_argument('-sm', '--save_model',
-                    action='store_true')  # on/off flag
+parser.add_argument("-t", "--timesteps", default=100)  # option that takes a value
+parser.add_argument("-lm", "--load_model", action="store_true")  # on/off flag
+parser.add_argument("-sm", "--save_model", action="store_true")  # on/off flag
 
 args = parser.parse_args()
 
@@ -55,7 +52,14 @@ n_positions = 8192
 
 env, obs_dim, image_dim, act_dim = init_env(env_name)
 
-model = DecisionTransformer(state_dim=state_dim, act_dim=act_dim, n_positions=n_positions, stdev=0.03, dtype=dtype, device=device)
+model = DecisionTransformer(
+    state_dim=state_dim,
+    act_dim=act_dim,
+    n_positions=n_positions,
+    stdev=0.03,
+    dtype=dtype,
+    device=device,
+)
 
 if args.load_model:
     model.load()
@@ -67,7 +71,9 @@ trainer = Trainer(model.parameters(), epochs=EPOCHS)
 for e in range(EPOCHS):
     T.cuda.empty_cache()
 
-    replay_buffer, attention_mask = reset_env(env, vit, act_dim, state_dim, TARGET_RETURN, dtype, device)
+    replay_buffer, attention_mask = reset_env(
+        env, vit, act_dim, state_dim, TARGET_RETURN, dtype, device
+    )
 
     terminated = truncated = False
     while not (terminated or truncated):
@@ -106,7 +112,17 @@ for e in range(EPOCHS):
     # train (also do it right)
     P_loss, R_loss = trainer.learn(replay_buffer)
 
-    print(e, "P_loss:", P_loss.item(), "R_loss:", R_loss.item(), "total_reward:", total_reward.item(), "average return", av_r.item())
+    print(
+        e,
+        "P_loss:",
+        P_loss.item(),
+        "R_loss:",
+        R_loss.item(),
+        "total_reward:",
+        total_reward.item(),
+        "average return",
+        av_r.item(),
+    )
 
     if e % 50 == 0:
         if args.save_model:

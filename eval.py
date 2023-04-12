@@ -29,9 +29,16 @@ load_model = bool(int(args[1]))
 if load_model:
     model = torch.load("model.pt").to(dtype=dtype, device=device)
 else:
-    model = DecisionTransformer(state_dim=encoding_dim, act_dim=act_dim * 2, n_positions=n_positions, device=device)
+    model = DecisionTransformer(
+        state_dim=encoding_dim,
+        act_dim=act_dim * 2,
+        n_positions=n_positions,
+        device=device,
+    )
 
-hist, attention_mask = reset_env(env, model, act_dim, encoding_dim, TARGET_RETURN, dtype, device)
+hist, attention_mask = reset_env(
+    env, model, act_dim, encoding_dim, TARGET_RETURN, dtype, device
+)
 
 terminated = truncated = False
 while not (terminated or truncated):
@@ -41,11 +48,20 @@ while not (terminated or truncated):
 
     action = action_pred.detach().squeeze().cpu().numpy()
     # action = np.array([random.uniform(0.75, 1), random.uniform(-1, 1), random.uniform(0, 0.2)])
-    action = torch.distributions.Normal(loc=torch.tensor([1, 1, 0], dtype=torch.float32), scale=1,).rsample().to(dtype=torch.float32, device="cpu")
+    action = (
+        torch.distributions.Normal(
+            loc=torch.tensor([1, 1, 0], dtype=torch.float32),
+            scale=1,
+        )
+        .rsample()
+        .to(dtype=torch.float32, device="cpu")
+    )
     observation, reward, terminated, truncated, info = env.step(action)
     print(reward)
 
-    state = model.proc_state(observation).to(device=device).reshape([1, 1, encoding_dim])
+    state = (
+        model.proc_state(observation).to(device=device).reshape([1, 1, encoding_dim])
+    )
 
     reward = torch.tensor(reward, device=device).reshape([1, 1])
     hist.append(state, state_pred, action_pred, reward, rtg_pred, 1)
