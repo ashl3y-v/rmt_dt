@@ -90,9 +90,9 @@ for e in range(EPOCHS):
 
         reward = T.tensor(reward, device=device, requires_grad=False).reshape([1, 1])
 
-        replay_buffer.append(state, action, reward, R_pred)
+        replay_buffer.append(state, action, reward, R_pred, compress=True)
 
-        attention_mask = T.cat([attention_mask, T.ones([1, 1], device=device)])
+        attention_mask = T.ones([replay_buffer.length(), 1], dtype=dtype, device=device)
 
         # print("states", hist.states.shape[1], ", ", end="")
         # delete

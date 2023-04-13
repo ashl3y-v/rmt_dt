@@ -1,3 +1,5 @@
+# To-do
+
 - [x] `rtg_preds` are critic
 - [x] Decaying learning rate
 - [x] Loop, check what Lookahead is
@@ -5,7 +7,7 @@
 - [x] Gaussian policy stdev (make product of model)
 - [x] Covariance matrix
 - [x] Make RTG be RTG/steps
-- [ ] Getting random NaNs in loc
+- [x] Getting random NaNs in loc (cause of lr)
 - [ ] R_pred only sees past states and actions, perhaps take last as critic value
 
 - [ ] do the vitmae thing

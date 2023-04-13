@@ -31,6 +31,7 @@ def reset_env(
 
     return replay_buffer, attention_mask
 
+
 def mean_range(contents, first, second, dim=0):
     before, inside, after = T.tensor_split(contents, (first, second), dim=dim)
 

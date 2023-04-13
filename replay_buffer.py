@@ -10,6 +10,7 @@ class ReplayBuffer(nn.Module):
         rewards,
         R_preds,
         timestep=0,
+        block_size=10,
         max_size=150,
         dtype=T.float32,
         device="cpu",
@@ -29,20 +30,8 @@ class ReplayBuffer(nn.Module):
         else:
             self.timestep = timestep.to(dtype=T.long, device=device).reshape(1, 1)
 
-        self.block_size = 10
+        self.block_size = block_size
         self.max_size = max_size
-        self.compressor = nn.Conv1d(
-            self.block_size,
-            1,
-            kernel_size=self.block_size,
-            padding=(self.block_size // 2),
-        )
-        self.decompressor = nn.ConvTranspose1d(
-            1,
-            self.block_size,
-            kernel_size=self.block_size,
-            padding=(self.block_size // 2),
-        )
 
     def predict(self, model, attention_mask):  # use attention_mask
         # with torch.inference_mode():
@@ -59,7 +48,7 @@ class ReplayBuffer(nn.Module):
         return state_preds[:, -1:, :], action_preds[:, -1:, :], R_preds[:, -1:, :]
 
     # save proper stuff, backwards update Rs, format right
-    def append(self, state, action, reward, R_pred, timestep_delta=1):
+    def append(self, state, action, reward, R_pred, timestep_delta=1, compress=False):
         self.states = T.cat([self.states, state], dim=1)
 
         self.actions = T.cat([self.actions, action], dim=1)
@@ -71,6 +60,9 @@ class ReplayBuffer(nn.Module):
         self.timestep = self.timestep + T.tensor(
             timestep_delta, device=self.device, dtype=T.long
         ).reshape(1, 1)
+
+        if compress:
+            self.compress()
 
     def length(self):
         return self.states.shape[1]
@@ -89,23 +81,36 @@ class ReplayBuffer(nn.Module):
 
     def compress_seq(self, seq, dim=0):
         n_blocks = (seq.shape[dim] - self.max_length) // self.block_size
-        blocks = seq[: self.block_size * n_blocks, :]
-        seq = seq[self.block_size * n_blocks :, :]
-        blocks = T.stack(T.split(blocks, self.block_size), dim=0)
+        blocks = seq[:, : self.block_size * n_blocks, :]
+        seq = seq[:, self.block_size * n_blocks :, :]
+        blocks = T.stack(T.split(blocks, self.block_size, dim=dim), dim=dim - 1)
         compressed = blocks.mean(dim=dim)
 
-        return T.cat([compressed, seq])
+        return T.cat([compressed, seq], dim=dim)
 
     def compress(self):
+        print(
+            self.states.shape,
+            self.actions.shape,
+            self.rewards.shape,
+            self.R_preds.shape,
+        )
         if self.length() > self.max_size:
-            self.states = self.compress_seq(self.states)
-            self.actions = self.compress_seq(self.actions)
-            self.rewards = self.compress_seq(self.rewards)
-            self.R_preds = self.compress_seq(self.R_preds)
+            self.states = self.compress_seq(self.states, dim=1)
+            self.actions = self.compress_seq(self.actions, dim=1)
+            self.rewards = self.compress_seq(self.rewards, dim=1)
+            self.R_preds = self.compress_seq(self.R_preds, dim=1)
 
 
 def init_replay_buffer(
-    state, act_dim, state_dim, TARGET_RETURN=9999, dtype=T.float32, device="cpu"
+    state,
+    act_dim,
+    state_dim,
+    TARGET_RETURN=9999,
+    block_size=10,
+    max_size=200,
+    dtype=T.float32,
+    device="cpu",
 ):
     actions = T.zeros([1, 1, act_dim], device=device, dtype=dtype)
     rewards = T.zeros(1, 1, device=device, dtype=dtype)
@@ -114,4 +119,13 @@ def init_replay_buffer(
 
     R_preds = T.tensor(TARGET_RETURN, device=device, dtype=dtype).reshape(1, 1, 1)
 
-    return ReplayBuffer(states, actions, rewards, R_preds, dtype=dtype, device=device)
+    return ReplayBuffer(
+        states,
+        actions,
+        rewards,
+        R_preds,
+        block_size=block_size,
+        max_size=max_size,
+        dtype=dtype,
+        device=device,
+    )

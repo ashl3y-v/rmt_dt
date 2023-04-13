@@ -31,15 +31,7 @@ T.manual_seed(42)
 seq = T.randn([1, 100, 69])
 dim = -2
 max_length = 50
-block_size = 5
+block_size = 10
 
-n_blocks = (seq.shape[dim] - max_length) // block_size
-n_blocks = n_blocks + int(n_blocks / block_size)
-blocks = seq[:, : block_size * n_blocks, :]
-seq = seq[:, block_size * n_blocks :, :]
-blocks = T.stack(T.split(blocks, block_size, dim=dim), dim=dim-1)
-compressed = blocks.mean(dim=dim)
-
-res = T.cat([compressed, seq], dim=dim)
 
 print(res.shape)
