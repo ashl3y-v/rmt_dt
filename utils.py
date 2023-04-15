@@ -13,7 +13,15 @@ def init_env(env_name, **kwargs):
 
 
 def reset_env(
-    env, vit, act_dim, state_dim, TARGET_RETURN, dtype=T.float32, device="cpu"
+    env,
+    vit,
+    act_dim,
+    state_dim,
+    TARGET_RETURN,
+    block_size=10,
+    max_size=200,
+    dtype=T.float32,
+    device="cpu",
 ):
     observation, _ = env.reset()
 
@@ -24,6 +32,8 @@ def reset_env(
         act_dim=act_dim,
         state_dim=state_dim,
         TARGET_RETURN=TARGET_RETURN,
+        block_size=block_size,
+        max_size=max_size,
         dtype=dtype,
         device=device,
     )

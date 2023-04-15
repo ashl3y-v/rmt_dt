@@ -12,6 +12,8 @@ class DecisionTransformer(nn.Module):
         n_heads=4,
         stdev=0.01,
         n_positions=8192,
+        min_action=None,
+        max_action=None,
         file="actor.pt",
         dtype=T.float32,
         device="cpu",
@@ -25,6 +27,11 @@ class DecisionTransformer(nn.Module):
         self.state_dim = state_dim
         self.act_dim = act_dim
 
+        self.min_action = min_action
+        self.max_action = max_action
+        if min_action and max_action:
+            self.scale_action = T.max(min_action, max_action)
+
         self.stdev = stdev
 
         # crashes if length is greater than n_positions
@@ -34,11 +41,16 @@ class DecisionTransformer(nn.Module):
             n_positions=n_positions,
             n_layer=n_layers,
             n_head=n_heads,
+            action_tanh=True,
+            activation_function="gelu_new",
         )
         self.transformer = transformers.DecisionTransformerModel(config)
 
+        # self.transformer = T.compile(self.transformer)
+
         self.to(dtype=dtype, device=device)
 
+    # @T.compile
     def forward(self, *args, **kwargs):
         cov_pad = T.zeros(
             [
@@ -53,25 +65,39 @@ class DecisionTransformer(nn.Module):
         state_preds, action_preds, reward_preds = self.transformer(*args, **kwargs)
         return state_preds, action_preds, reward_preds
 
+    # @T.compile
     def split(self, actions):
         mu = actions[0, :, : self.act_dim]
+        if self.min_action and self.max_action:
+            mu = T.clip(mu * self.scale_action, self.min_action, self.max_action)
         cov = actions[0, :, self.act_dim :].reshape(self.act_dim, self.act_dim)
         cov = T.abs(cov @ cov.t()).unsqueeze(0)
 
         return mu, cov
 
+    # @T.compile
     def sample(self, actions):
         mu, cov = self.split(actions)
         dist = self.gaussian(mu, cov)
         action = dist.rsample().reshape([1, 1, self.act_dim])
+        if self.min_action and self.max_action:
+            action = T.clip(action, self.min_action, self.max_action)
 
         return action
 
+    # @T.compile
     def gaussian(self, mu, cov):
         return T.distributions.MultivariateNormal(loc=mu, covariance_matrix=cov)
 
+    # @T.compile
     def save(self):
         T.save(self.state_dict(), self.file)
 
+    # @T.compile
     def load(self):
         self.load_state_dict(T.load(self.file))
+
+
+if __name__ == "__main__":
+    dt = DecisionTransformer()
+    print(dt.save)

@@ -22,6 +22,8 @@ T.backends.cudnn.benchmark = True
 
 T.autograd.set_detect_anomaly(True)
 
+T.backends.cuda.matmul.allow_tf32 = True
+
 # TODO:
 # use batch normalization maybe
 # use automatic mixed precision (however that works)
@@ -72,7 +74,14 @@ for e in range(EPOCHS):
     T.cuda.empty_cache()
 
     replay_buffer, attention_mask = reset_env(
-        env, vit, act_dim, state_dim, TARGET_RETURN, dtype, device
+        env,
+        vit,
+        act_dim,
+        state_dim,
+        TARGET_RETURN,
+        max_size=12,
+        dtype=dtype,
+        device=device,
     )
 
     terminated = truncated = False

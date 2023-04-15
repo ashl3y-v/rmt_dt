@@ -18,6 +18,7 @@ class Trainer(nn.Module):
 
         self.huber = nn.HuberLoss(delta=1)
 
+    # @T.compile
     def learn(self, replay_buffer):
         for _ in range(self.steps_R):
             self.optim.zero_grad()

@@ -15,6 +15,7 @@ class ReplayBuffer(nn.Module):
         dtype=T.float32,
         device="cpu",
     ):
+        super().__init__()
         self.device = device
         self.dtype = dtype
 
@@ -33,6 +34,7 @@ class ReplayBuffer(nn.Module):
         self.block_size = block_size
         self.max_size = max_size
 
+    # @T.compile
     def predict(self, model, attention_mask):  # use attention_mask
         # with torch.inference_mode():
         state_preds, action_preds, R_preds = model(
@@ -48,6 +50,7 @@ class ReplayBuffer(nn.Module):
         return state_preds[:, -1:, :], action_preds[:, -1:, :], R_preds[:, -1:, :]
 
     # save proper stuff, backwards update Rs, format right
+    # @T.compile
     def append(self, state, action, reward, R_pred, timestep_delta=1, compress=False):
         self.states = T.cat([self.states, state], dim=1)
 
@@ -64,9 +67,11 @@ class ReplayBuffer(nn.Module):
         if compress:
             self.compress()
 
+    # @T.compile
     def length(self):
         return self.states.shape[1]
 
+    # @T.compile
     def R_update(self):
         total_reward = self.rewards.sum()
         av_r = total_reward / self.length()
@@ -79,29 +84,31 @@ class ReplayBuffer(nn.Module):
         # print("total_reward", total_reward)
         return total_reward, av_r
 
+    # @T.compile
     def compress_seq(self, seq, dim=0):
-        n_blocks = (seq.shape[dim] - self.max_length) // self.block_size
+        n_blocks = (seq.shape[dim] - self.max_size) // self.block_size
         blocks = seq[:, : self.block_size * n_blocks, :]
         seq = seq[:, self.block_size * n_blocks :, :]
-        blocks = T.stack(T.split(blocks, self.block_size, dim=dim), dim=dim - 1)
+        blocks = T.stack(T.split(blocks, self.block_size, dim=dim), dim=dim)
         compressed = blocks.mean(dim=dim)
 
         return T.cat([compressed, seq], dim=dim)
 
+    # @T.compile
     def compress(self):
-        print(
-            self.states.shape,
-            self.actions.shape,
-            self.rewards.shape,
-            self.R_preds.shape,
-        )
+        print(self.legnth)
         if self.length() > self.max_size:
             self.states = self.compress_seq(self.states, dim=1)
             self.actions = self.compress_seq(self.actions, dim=1)
-            self.rewards = self.compress_seq(self.rewards, dim=1)
+            self.rewards = (
+                self.compress_seq(self.rewards.unsqueeze(0), dim=1)
+                .squeeze()
+                .unsqueeze(-1)
+            )
             self.R_preds = self.compress_seq(self.R_preds, dim=1)
 
 
+# @T.compile
 def init_replay_buffer(
     state,
     act_dim,
@@ -129,3 +136,8 @@ def init_replay_buffer(
         dtype=dtype,
         device=device,
     )
+
+
+if __name__ == "__main__":
+    replay_buffer = init_replay_buffer(T.zeros(100), act_dim=3, state_dim=100)
+    print(replay_buffer)
