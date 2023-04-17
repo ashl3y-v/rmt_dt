@@ -79,7 +79,7 @@ for e in range(EPOCHS):
         act_dim,
         state_dim,
         TARGET_RETURN,
-        max_size=12,
+        max_size=140,
         dtype=dtype,
         device=device,
     )
@@ -95,7 +95,7 @@ for e in range(EPOCHS):
         for _ in range(steps_per_action):
             observation, reward, terminated, truncated, info = env.step(action_np)
 
-        state = vit(observation).to(device=device).reshape([1, 1, state_dim])
+        state = vit(observation).reshape([1, 1, state_dim])
 
         reward = T.tensor(reward, device=device, requires_grad=False).reshape([1, 1])
 
@@ -108,8 +108,8 @@ for e in range(EPOCHS):
         # if hist.states.shape[1] == 89:
         #     terminated = True
 
-        if replay_buffer.states.shape[1] == 200:
-            terminated = True
+        # if replay_buffer.states.shape[1] == 200:
+        #     terminated = True
 
         # don't delete
         if replay_buffer.states.shape[1] == n_positions:

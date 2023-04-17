@@ -19,11 +19,8 @@ class ViT(nn.Module):
         )
         self.vit = transformers.BeitModel.from_pretrained(model_ckpt)
 
-        # self.vit = T.compile(self.vit)
-
         self.to(dtype=dtype, device=device)
 
-    # @T.compile
     def forward(self, o):
         with T.inference_mode():
             o = (

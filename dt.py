@@ -46,11 +46,8 @@ class DecisionTransformer(nn.Module):
         )
         self.transformer = transformers.DecisionTransformerModel(config)
 
-        # self.transformer = T.compile(self.transformer)
-
         self.to(dtype=dtype, device=device)
 
-    # @T.compile
     def forward(self, *args, **kwargs):
         cov_pad = T.zeros(
             [
@@ -65,7 +62,6 @@ class DecisionTransformer(nn.Module):
         state_preds, action_preds, reward_preds = self.transformer(*args, **kwargs)
         return state_preds, action_preds, reward_preds
 
-    # @T.compile
     def split(self, actions):
         mu = actions[0, :, : self.act_dim]
         if self.min_action and self.max_action:
@@ -75,7 +71,6 @@ class DecisionTransformer(nn.Module):
 
         return mu, cov
 
-    # @T.compile
     def sample(self, actions):
         mu, cov = self.split(actions)
         dist = self.gaussian(mu, cov)
@@ -85,15 +80,12 @@ class DecisionTransformer(nn.Module):
 
         return action
 
-    # @T.compile
     def gaussian(self, mu, cov):
         return T.distributions.MultivariateNormal(loc=mu, covariance_matrix=cov)
 
-    # @T.compile
     def save(self):
         T.save(self.state_dict(), self.file)
 
-    # @T.compile
     def load(self):
         self.load_state_dict(T.load(self.file))
 
