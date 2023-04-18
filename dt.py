@@ -10,7 +10,6 @@ class DecisionTransformer(nn.Module):
         act_dim=3,
         n_layers=3,
         n_heads=4,
-        stdev=0.01,
         n_positions=8192,
         min_action=None,
         max_action=None,
@@ -32,8 +31,6 @@ class DecisionTransformer(nn.Module):
         if min_action and max_action:
             self.scale_action = T.max(min_action, max_action)
 
-        self.stdev = stdev
-
         # crashes if length is greater than n_positions
         config = transformers.DecisionTransformerConfig(
             state_dim=state_dim,
@@ -49,18 +46,19 @@ class DecisionTransformer(nn.Module):
         self.to(dtype=dtype, device=device)
 
     def forward(self, *args, **kwargs):
-        cov_pad = T.zeros(
-            [
-                kwargs["actions"].shape[-3],
-                kwargs["actions"].shape[-2],
-                self.act_dim**2,
-            ],
-            device=self.device,
-        )
-        kwargs["actions"] = T.cat([kwargs["actions"], cov_pad], dim=-1)
+        with T.cuda.amp.autocast():
+            cov_pad = T.zeros(
+                [
+                    kwargs["actions"].shape[-3],
+                    kwargs["actions"].shape[-2],
+                    self.act_dim**2,
+                ],
+                device=self.device,
+            )
+            kwargs["actions"] = T.cat([kwargs["actions"], cov_pad], dim=-1)
 
-        state_preds, action_preds, reward_preds = self.transformer(*args, **kwargs)
-        return state_preds, action_preds, reward_preds
+            state_preds, action_preds, reward_preds = self.transformer(*args, **kwargs)
+            return state_preds, action_preds, reward_preds
 
     def split(self, actions):
         mu = actions[0, :, : self.act_dim]
