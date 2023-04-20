@@ -22,22 +22,21 @@ class ViT(nn.Module):
         self.to(dtype=dtype, device=device)
 
     def forward(self, o):
-        with T.cuda.amp.autocast():
-            self.eval()
-            with T.inference_mode():
-                o = (
-                    T.from_numpy(o)
-                    .to(dtype=self.dtype, device=self.device)
-                    .reshape(self.image_dim)
-                )
-                o = self.image_processor(o, return_tensors="pt").pixel_values.to(
-                    dtype=self.dtype, device=self.device
-                )
-                e = self.vit(o).to_tuple()
-                e = e[1].unsqueeze(0)
+        self.eval()
+        with T.inference_mode(), T.cuda.amp.autocast():
+            o = (
+                T.from_numpy(o)
+                .to(dtype=self.dtype, device=self.device)
+                .reshape(self.image_dim)
+            )
+            o = self.image_processor(o, return_tensors="pt").pixel_values.to(
+                dtype=self.dtype, device=self.device
+            )
+            e = self.vit(o).to_tuple()
+            e = e[1].unsqueeze(0)
 
-            # needed
-            return e.clone()
+        # needed
+        return e.detach()
 
 
 if __name__ == "__main__":

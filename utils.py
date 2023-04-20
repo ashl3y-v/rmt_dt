@@ -37,9 +37,8 @@ def reset_env(
         dtype=dtype,
         device=device,
     )
-    attention_mask = T.zeros(1, 1, device=device, dtype=dtype)
 
-    return replay_buffer, attention_mask
+    return replay_buffer
 
 
 def mean_range(contents, first, second, dim=0):

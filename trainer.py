@@ -8,12 +8,13 @@ class Trainer(nn.Module):
     def __init__(
         self,
         params,
-        max_lr=1e-3,
+        lr=3e-4,
         steps_P=1,
-        steps_R=3,
+        steps_R=5,
         epochs=100,
-        clip=0.1,
+        clip=0.25,
         scaler=T.cuda.amp.grad_scaler.GradScaler(),
+        use_lr_schedule=False,
     ):
         super().__init__()
 
@@ -26,10 +27,16 @@ class Trainer(nn.Module):
 
         self.clip = clip
 
-        self.optim = T.optim.AdamW(params, lr=0)
-        self.lr_scheduler = lr_scheduler.OneCycleLR(
-            self.optim, max_lr=max_lr, epochs=epochs, steps_per_epoch=steps_P + steps_R
-        )
+        self.optim = T.optim.AdamW(params, lr=lr)
+
+        self.use_lr_schedule = use_lr_schedule
+        if use_lr_schedule:
+            self.lr_scheduler = lr_scheduler.OneCycleLR(
+                self.optim,
+                max_lr=lr,
+                epochs=epochs,
+                steps_per_epoch=steps_P + steps_R,
+            )
 
         self.huber = nn.HuberLoss(delta=1)
 
@@ -43,7 +50,8 @@ class Trainer(nn.Module):
             T.nn.utils.clip_grad_norm_(self.params, self.clip)
             self.scaler.step(self.optim)
             self.scaler.update()
-            self.lr_scheduler.step()
+            if self.use_lr_schedule:
+                self.lr_scheduler.step()
 
         for _ in range(self.steps_P):
             self.optim.zero_grad(set_to_none=True)
@@ -54,6 +62,7 @@ class Trainer(nn.Module):
             T.nn.utils.clip_grad_norm_(self.params, self.clip)
             self.scaler.step(self.optim)
             self.scaler.update()
-            self.lr_scheduler.step()
+            if self.use_lr_schedule:
+                self.lr_scheduler.step()
 
         return P_loss, R_loss

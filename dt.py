@@ -28,8 +28,6 @@ class DecisionTransformer(nn.Module):
 
         self.min_action = min_action
         self.max_action = max_action
-        if min_action and max_action:
-            self.scale_action = T.max(min_action, max_action)
 
         # crashes if length is greater than n_positions
         config = transformers.DecisionTransformerConfig(
@@ -46,24 +44,29 @@ class DecisionTransformer(nn.Module):
         self.to(dtype=dtype, device=device)
 
     def forward(self, *args, **kwargs):
-        with T.cuda.amp.autocast():
-            cov_pad = T.zeros(
-                [
-                    kwargs["actions"].shape[-3],
-                    kwargs["actions"].shape[-2],
-                    self.act_dim**2,
-                ],
-                device=self.device,
-            )
-            kwargs["actions"] = T.cat([kwargs["actions"], cov_pad], dim=-1)
+        cov_pad = T.zeros(
+            [
+                kwargs["actions"].shape[-3],
+                kwargs["actions"].shape[-2],
+                self.act_dim**2,
+            ],
+            device=self.device,
+        )
+        kwargs["actions"] = T.cat([kwargs["actions"], cov_pad], dim=-1)
 
+        with T.cuda.amp.autocast():
             state_preds, action_preds, reward_preds = self.transformer(*args, **kwargs)
-            return state_preds, action_preds, reward_preds
+
+        return (
+            state_preds.to(dtype=self.dtype),
+            action_preds.to(dtype=self.dtype),
+            reward_preds.to(dtype=self.dtype),
+        )
 
     def split(self, actions):
         mu = actions[0, :, : self.act_dim]
         if self.min_action and self.max_action:
-            mu = T.clip(mu * self.scale_action, self.min_action, self.max_action)
+            mu = self.min_action + mu * (self.max_action - self.min_action)
         cov = actions[0, :, self.act_dim :].reshape(self.act_dim, self.act_dim)
         cov = T.abs(cov @ cov.t()).unsqueeze(0)
 

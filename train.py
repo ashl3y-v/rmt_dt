@@ -24,6 +24,9 @@ T.autograd.set_detect_anomaly(True)
 
 T.backends.cuda.matmul.allow_tf32 = True
 
+# The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
+T.backends.cudnn.allow_tf32 = True
+
 # TODO:
 # use batch normalization maybe
 # use automatic mixed precision (however that works)
@@ -42,11 +45,11 @@ TARGET_RETURN = 10000
 EPOCHS = int(args.timesteps)
 device = "cuda" if T.cuda.is_available() else "cpu"
 dtype = T.float32
+amp_dtype = T.bfloat16
 scaler = T.cuda.amp.grad_scaler.GradScaler(enabled=True)
 
-T.set_autocast_enabled(True)
+T.set_autocast_gpu_dtype(amp_dtype)
 T.set_autocast_cache_enabled(True)
-T.set_autocast_gpu_dtype(T.float16)
 
 # losses = torch.tensor([], device=device)
 # rewards = torch.tensor([], device=device)
@@ -54,6 +57,8 @@ T.set_autocast_gpu_dtype(T.float16)
 env_name = "CarRacing-v2"
 state_dim = 768
 n_positions = 8192
+
+steps_per_action = 5
 
 env, obs_dim, image_dim, act_dim = init_env(env_name)
 
@@ -70,21 +75,24 @@ if args.load_model:
 
 vit = ViT(image_dim=image_dim, dtype=dtype, device=device)
 
-trainer = Trainer(model.parameters(), epochs=EPOCHS, scaler=scaler)
+trainer = Trainer(
+    model.parameters(), epochs=EPOCHS, scaler=scaler, use_lr_schedule=False
+)
 
 for e in range(EPOCHS):
     T.cuda.empty_cache()
 
-    replay_buffer, attention_mask = reset_env(
+    replay_buffer = reset_env(
         env,
         vit,
         act_dim,
         state_dim,
         TARGET_RETURN,
-        max_size=140,
+        max_size=150,
         dtype=dtype,
         device=device,
     )
+    attention_mask = T.ones([replay_buffer.length(), 1], dtype=dtype, device=device)
 
     terminated = truncated = False
     while not (terminated or truncated):
@@ -94,7 +102,8 @@ for e in range(EPOCHS):
         action = model.sample(action_pred)
         action_np = action.detach().squeeze().cpu().numpy()
 
-        observation, reward, terminated, truncated, info = env.step(action_np)
+        for _ in range(steps_per_action):
+            observation, reward, terminated, truncated, info = env.step(action_np)
 
         state = vit(observation).reshape([1, 1, state_dim])
 

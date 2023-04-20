@@ -8,15 +8,8 @@ from utils import mean_range
 
 T.manual_seed(42)
 
-T.set_autocast_enabled(True)
-# T.set_autocast_gpu_dtype(T.float16)
-T.set_autocast_cpu_dtype(T.bfloat16)
-T.set_autocast_cache_enabled(True)
-T.set_autocast_cpu_enabled(True)
+a = T.fill(T.zeros([10]), T.nan)
+b = T.ones([10])
+a = T.cat([a, b])
 
-a = T.randn([1, 10, 10])
-b = T.randn([1, 10, 10])
-with T.cpu.amp.autocast():
-    c = a @ b
-
-print(c.dtype)
+print(a.isnan().any())  # ,  # isnan().any())

@@ -108,7 +108,7 @@ def init_replay_buffer(
     TARGET_RETURN=9999,
     block_size=10,
     max_size=200,
-    dtype=T.float32,
+    dtype=T.float16,
     device="cpu",
 ):
     actions = T.zeros([1, 1, act_dim], device=device, dtype=dtype)
