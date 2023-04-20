@@ -10,10 +10,11 @@ class ReplayBuffer(nn.Module):
         rewards,
         R_preds,
         timestep=0,
+        num_envs=1,
         block_size=10,
         max_size=150,
         dtype=T.float32,
-        device="cpu",
+        device="cuda",
     ):
         super().__init__()
         self.device = device
@@ -25,11 +26,13 @@ class ReplayBuffer(nn.Module):
         self.R_preds = R_preds
 
         if isinstance(timestep, int):
-            self.timestep = T.tensor(timestep, device=device, dtype=T.long).reshape(
-                1, 1
-            )
+            self.timestep = T.tensor(
+                [timestep] * num_envs, device=device, dtype=T.long
+            ).reshape(num_envs, 1)
         else:
-            self.timestep = timestep.to(dtype=T.long, device=device).reshape(1, 1)
+            self.timestep = timestep.to(dtype=T.long, device=device).reshape(
+                num_envs, 1
+            )
 
         self.block_size = block_size
         self.max_size = max_size
@@ -51,6 +54,10 @@ class ReplayBuffer(nn.Module):
     # save proper stuff, backwards update Rs, format right
     def append(self, state, action, reward, R_pred, timestep_delta=1, compress=False):
         self.states = T.cat([self.states, state], dim=1)
+
+        assert action.dim() == 3 or action.dim() == 2
+        if action.dim() == 2:
+            action = action.reshape([action.shape[0], 1, action.shape[-1]])
 
         self.actions = T.cat([self.actions, action], dim=1)
 
@@ -106,23 +113,27 @@ def init_replay_buffer(
     act_dim,
     state_dim,
     TARGET_RETURN=9999,
+    num_envs=1,
     block_size=10,
     max_size=200,
     dtype=T.float16,
-    device="cpu",
+    device="cuda",
 ):
-    actions = T.zeros([1, 1, act_dim], device=device, dtype=dtype)
-    rewards = T.zeros(1, 1, device=device, dtype=dtype)
+    actions = T.zeros([num_envs, 1, act_dim], device=device, dtype=dtype)
+    rewards = T.zeros(num_envs, 1, device=device, dtype=dtype)
 
-    states = state.reshape(1, 1, state_dim).to(device=device, dtype=dtype)
+    states = state.reshape(num_envs, 1, state_dim).to(device=device, dtype=dtype)
 
-    R_preds = T.tensor(TARGET_RETURN, device=device, dtype=dtype).reshape(1, 1, 1)
+    R_preds = T.tensor([TARGET_RETURN] * num_envs, device=device, dtype=dtype).reshape(
+        num_envs, 1, 1
+    )
 
     return ReplayBuffer(
         states,
         actions,
         rewards,
         R_preds,
+        num_envs=num_envs,
         block_size=block_size,
         max_size=max_size,
         dtype=dtype,

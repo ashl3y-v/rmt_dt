@@ -7,15 +7,15 @@ class DecisionTransformer(nn.Module):
     def __init__(
         self,
         state_dim=768,
-        act_dim=3,
+        act_dim=8,
         n_layers=3,
-        n_heads=4,
+        n_heads=8,
         n_positions=8192,
         min_action=None,
         max_action=None,
         file="actor.pt",
         dtype=T.float32,
-        device="cpu",
+        device="cuda",
     ):
         super().__init__()
         self.dtype = dtype
@@ -64,20 +64,21 @@ class DecisionTransformer(nn.Module):
         )
 
     def split(self, actions):
-        mu = actions[0, :, : self.act_dim]
+        mu = actions[:, :, : self.act_dim]
         if self.min_action and self.max_action:
             mu = self.min_action + mu * (self.max_action - self.min_action)
-        cov = actions[0, :, self.act_dim :].reshape(self.act_dim, self.act_dim)
-        cov = T.abs(cov @ cov.t()).unsqueeze(0)
+        mu = mu.reshape(mu.shape[0], mu.shape[-1])
+        cov = actions[:, :, self.act_dim :].reshape(
+            actions.shape[0], self.act_dim, self.act_dim
+        )
+        cov = T.abs(cov @ cov.permute(0, 2, 1))
 
         return mu, cov
 
     def sample(self, actions):
         mu, cov = self.split(actions)
         dist = self.gaussian(mu, cov)
-        action = dist.rsample().reshape([1, 1, self.act_dim])
-        if self.min_action and self.max_action:
-            action = T.clip(action, self.min_action, self.max_action)
+        action = dist.rsample()
 
         return action
 

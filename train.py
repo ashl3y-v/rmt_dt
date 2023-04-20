@@ -29,7 +29,6 @@ T.backends.cudnn.allow_tf32 = True
 
 # TODO:
 # use batch normalization maybe
-# use automatic mixed precision (however that works)
 
 parser = argparse.ArgumentParser(
     prog="Train Decision Transformer", description="Does it", epilog="Made by Ashley :)"
@@ -60,7 +59,9 @@ n_positions = 8192
 
 steps_per_action = 5
 
-env, obs_dim, image_dim, act_dim = init_env(env_name)
+num_envs = 1
+
+env, obs_dim, image_dim, act_dim = init_env(env_name, num_envs=num_envs)
 
 model = DecisionTransformer(
     state_dim=state_dim,
@@ -73,7 +74,7 @@ model = DecisionTransformer(
 if args.load_model:
     model.load()
 
-vit = ViT(image_dim=image_dim, dtype=dtype, device=device)
+vit = ViT(image_dim=image_dim, num_envs=num_envs, dtype=dtype, device=device)
 
 trainer = Trainer(
     model.parameters(), epochs=EPOCHS, scaler=scaler, use_lr_schedule=False
@@ -88,30 +89,38 @@ for e in range(EPOCHS):
         act_dim,
         state_dim,
         TARGET_RETURN,
+        num_envs=num_envs,
         max_size=150,
         dtype=dtype,
         device=device,
     )
-    attention_mask = T.ones([replay_buffer.length(), 1], dtype=dtype, device=device)
+    attention_mask = T.ones(
+        [num_envs, replay_buffer.length()], dtype=dtype, device=device
+    )
 
-    terminated = truncated = False
-    while not (terminated or truncated):
+    terminated = truncated = T.tensor([False] * num_envs)
+    while not (terminated + truncated).all():
         state_pred, action_pred, R_pred = replay_buffer.predict(model, attention_mask)
 
-        # think about n frame-length actions
         action = model.sample(action_pred)
-        action_np = action.detach().squeeze().cpu().numpy()
+        action_np = action.detach().cpu().numpy()
 
         for _ in range(steps_per_action):
             observation, reward, terminated, truncated, info = env.step(action_np)
 
-        state = vit(observation).reshape([1, 1, state_dim])
+        terminated, truncated = T.tensor(terminated), T.tensor(truncated)
 
-        reward = T.tensor(reward, device=device, requires_grad=False).reshape([1, 1])
+        state = vit(observation).reshape([num_envs, 1, state_dim])
+
+        reward = T.tensor(reward, device=device, requires_grad=False).reshape(
+            [num_envs, 1]
+        )
 
         replay_buffer.append(state, action, reward, R_pred, compress=True)
 
-        attention_mask = T.ones([replay_buffer.length(), 1], dtype=dtype, device=device)
+        attention_mask = T.ones(
+            [num_envs, replay_buffer.length()], dtype=dtype, device=device
+        )
 
         # print("states", hist.states.shape[1], ", ", end="")
         # delete
