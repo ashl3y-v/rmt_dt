@@ -32,7 +32,7 @@ class ViT(nn.Module):
                 .to(dtype=self.dtype, device=self.device)
                 .reshape(self.num_envs, *self.image_dim)
             )
-            o = self.image_processor(o, return_tensors="pt").pixel_values.to(
+            o = self.image_processor.preprocess(o, return_tensors="pt").pixel_values.to(
                 dtype=self.dtype, device=self.device
             )
             e = self.vit(o).to_tuple()

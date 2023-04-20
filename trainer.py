@@ -14,6 +14,7 @@ class Trainer(nn.Module):
         epochs=100,
         clip=0.25,
         scaler=T.cuda.amp.grad_scaler.GradScaler(),
+        autocast=False,
         use_lr_schedule=False,
     ):
         super().__init__()
@@ -23,7 +24,9 @@ class Trainer(nn.Module):
         self.steps_P = steps_P
         self.steps_R = steps_R
 
-        self.scaler = scaler
+        self.autocast = autocast
+        if autocast:
+            self.scaler = scaler
 
         self.clip = clip
 
@@ -43,7 +46,10 @@ class Trainer(nn.Module):
     def learn(self, replay_buffer):
         for _ in range(self.steps_R):
             self.optim.zero_grad(set_to_none=True)
-            with T.cuda.amp.autocast():
+            if self.autocast:
+                with T.cuda.amp.autocast():
+                    R_loss = self.huber(replay_buffer.R_preds, replay_buffer.Rs)
+            else:
                 R_loss = self.huber(replay_buffer.R_preds, replay_buffer.Rs)
             self.scaler.scale(R_loss).backward(retain_graph=True)
             self.scaler.unscale_(self.optim)
@@ -55,7 +61,10 @@ class Trainer(nn.Module):
 
         for _ in range(self.steps_P):
             self.optim.zero_grad(set_to_none=True)
-            with T.cuda.amp.autocast():
+            if self.autocast:
+                with T.cuda.amp.autocast():
+                    P_loss = -replay_buffer.R_preds.mean()
+            else:
                 P_loss = -replay_buffer.R_preds.mean()
             self.scaler.scale(P_loss).backward()
             self.scaler.unscale_(self.optim)

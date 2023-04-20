@@ -116,7 +116,7 @@ def init_replay_buffer(
     num_envs=1,
     block_size=10,
     max_size=200,
-    dtype=T.float16,
+    dtype=T.bfloat16,
     device="cuda",
 ):
     actions = T.zeros([num_envs, 1, act_dim], device=device, dtype=dtype)

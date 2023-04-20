@@ -43,12 +43,10 @@ args = parser.parse_args()
 TARGET_RETURN = 10000
 EPOCHS = int(args.timesteps)
 device = "cuda" if T.cuda.is_available() else "cpu"
-dtype = T.float32
-amp_dtype = T.bfloat16
-scaler = T.cuda.amp.grad_scaler.GradScaler(enabled=True)
+dtype = T.bfloat16
 
-T.set_autocast_gpu_dtype(amp_dtype)
-T.set_autocast_cache_enabled(True)
+# T.set_autocast_gpu_dtype(amp_dtype)
+# T.set_autocast_cache_enabled(True)
 
 # losses = torch.tensor([], device=device)
 # rewards = torch.tensor([], device=device)
@@ -77,9 +75,8 @@ if args.load_model:
 vit = ViT(image_dim=image_dim, num_envs=num_envs, dtype=dtype, device=device)
 
 trainer = Trainer(
-    model.parameters(), epochs=EPOCHS, scaler=scaler, use_lr_schedule=False
+    model.parameters(), epochs=EPOCHS, autocast=False, use_lr_schedule=False
 )
-
 for e in range(EPOCHS):
     T.cuda.empty_cache()
 
@@ -103,7 +100,7 @@ for e in range(EPOCHS):
         state_pred, action_pred, R_pred = replay_buffer.predict(model, attention_mask)
 
         action = model.sample(action_pred)
-        action_np = action.detach().cpu().numpy()
+        action_np = action.detach().to(dtype=T.float16).cpu().numpy()
 
         for _ in range(steps_per_action):
             observation, reward, terminated, truncated, info = env.step(action_np)

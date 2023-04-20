@@ -1,4 +1,3 @@
-import sys
 import torch
 import random
 import gymnasium as gym
