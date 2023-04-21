@@ -1,7 +1,10 @@
 # To-do
 
 - [ ] Compression (have to change attention mask, make explicitly size of history) (test)
-- [ ] R_pred only sees past states and actions, perhaps take last as critic value (idk)
+- [ ] Figure out compression, blocks of 200 steps?
+- [ ] Hierarchy of models? Short vs long
+- [ ] Multiple predictions, decision & reaction, encoder-decoder
+- [ ] R_pred only sees past states and actions, perhaps take last as critic value (IDK)
 - [ ] Rewrite DT
 - [ ] Vectorize env
 - [ ] check out swinv2
