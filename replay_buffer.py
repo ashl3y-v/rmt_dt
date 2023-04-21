@@ -38,7 +38,6 @@ class ReplayBuffer(nn.Module):
         self.max_size = max_size
 
     def predict(self, model, attention_mask):  # use attention_mask
-        # with torch.inference_mode():
         state_preds, action_preds, R_preds = model(
             states=self.states,
             actions=self.actions,

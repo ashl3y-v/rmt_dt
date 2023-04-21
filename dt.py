@@ -13,7 +13,6 @@ class DecisionTransformer(nn.Module):
         n_positions=8192,
         min_action=None,
         max_action=None,
-        autocast=False,
         file="actor.pt",
         dtype=T.float32,
         device="cuda",
@@ -29,8 +28,6 @@ class DecisionTransformer(nn.Module):
 
         self.min_action = min_action
         self.max_action = max_action
-
-        self.autocast = autocast
 
         # crashes if length is greater than n_positions
         config = transformers.DecisionTransformerConfig(
@@ -53,22 +50,14 @@ class DecisionTransformer(nn.Module):
                 kwargs["actions"].shape[-2],
                 self.act_dim**2,
             ],
+            dtype=self.dtype,
             device=self.device,
         )
         kwargs["actions"] = T.cat([kwargs["actions"], cov_pad], dim=-1)
 
-        if self.autocast:
-            with T.cuda.amp.autocast():
-                state_preds, action_preds, reward_preds = self.transformer(
-                    *args, **kwargs
-                )
-        else:
-            state_preds, action_preds, reward_preds = self.transformer(*args, **kwargs)
-
-        if self.autocast:
-            state_preds = state_preds.to(dtype=self.dtype)
-            action_preds = action_preds.to(dtype=self.dtype)
-            reward_preds = reward_preds.to(dtype=self.dtype)
+        state_preds, action_preds, reward_preds = self.transformer(*args, **kwargs)
+        if action_preds.isnan().any():
+            print(action_preds)
 
         return (
             state_preds,
@@ -96,6 +85,9 @@ class DecisionTransformer(nn.Module):
         return action
 
     def gaussian(self, mu, cov):
+        mu = mu if mu.dtype == T.float32 else mu.to(dtype=T.float32)
+        cov = cov if cov.dtype == T.float32 else cov.to(dtype=T.float32)
+
         return T.distributions.MultivariateNormal(loc=mu, covariance_matrix=cov)
 
     def save(self):

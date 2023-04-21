@@ -26,7 +26,7 @@ class ViT(nn.Module):
 
     def forward(self, o):
         self.eval()
-        with T.inference_mode(), T.cuda.amp.autocast():
+        with T.inference_mode():
             o = (
                 T.from_numpy(o)
                 .to(dtype=self.dtype, device=self.device)
@@ -39,7 +39,7 @@ class ViT(nn.Module):
             e = e[1].unsqueeze(0)
 
         # needed
-        return e.detach()
+        return e.detach().clone()
 
 
 if __name__ == "__main__":
