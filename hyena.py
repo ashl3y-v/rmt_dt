@@ -1,16 +1,7 @@
 import math
-
-from re import U
-import torch
+import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
-
-from einops import rearrange, repeat
-
-try:
-    from src.ops.fftconv import fftconv_ref, fftconv_func
-except ImportError:
-    fftconv_func = None
 
 try:
     from flash_attn.ops.fused_dense import FusedDense
