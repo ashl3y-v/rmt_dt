@@ -257,19 +257,19 @@ if __name__ == "__main__":
 
     batches = 1
     d_model = 768
-    l_max = 2**15
+    l_max = 2**12
     attention = HyenaOperator(
         d_model=d_model,
         l_max=l_max,
         order=2,
         filter_order=64,
-    )
+    ).to(dtype=dtype, device=device)
     layer = nn.TransformerEncoderLayer(
         d_model, 1, activation=F.mish, dtype=dtype, device=device
     )
     layer.self_attn = attention
     model = nn.TransformerEncoder(layer, num_layers=10)
-    x = T.randn(batches, l_max, d_model, requires_grad=True, dtype=dtype)
+    x = T.randn(batches, l_max, d_model, requires_grad=True, dtype=dtype, device=device)
     y = model(x)
 
     print(x.shape, y.shape)
