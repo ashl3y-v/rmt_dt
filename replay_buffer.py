@@ -5,14 +5,11 @@ from torch import nn
 class ReplayBuffer(nn.Module):
     def __init__(
         self,
-        states,
-        actions,
-        rewards,
-        R_preds,
-        timestep=0,
-        num_envs=1,
-        block_size=10,
-        max_size=150,
+        s,
+        a,
+        r,
+        artg_hat,
+        n_env=1,
         dtype=T.float32,
         device="cuda",
     ):
@@ -20,32 +17,18 @@ class ReplayBuffer(nn.Module):
         self.device = device
         self.dtype = dtype
 
-        self.states = states
-        self.actions = actions
-        self.rewards = rewards
-        self.R_preds = R_preds
+        self.s = s
+        self.a = a
+        self.r = r
+        self.artg_hat = artg_hat
 
-        if isinstance(timestep, int):
-            self.timestep = T.tensor(
-                [timestep] * num_envs, device=device, dtype=T.long
-            ).reshape(num_envs, 1)
-        else:
-            self.timestep = timestep.to(dtype=T.long, device=device).reshape(
-                num_envs, 1
-            )
-
-        self.block_size = block_size
-        self.max_size = max_size
-
-    def predict(self, model, attention_mask):  # use attention_mask
+    def predict(self, model, mask=None):  # use attention_mask
         state_preds, action_preds, R_preds = model(
-            states=self.states,
-            actions=self.actions,
-            rewards=self.rewards,
-            returns_to_go=self.R_preds,
-            timesteps=self.timestep,
-            attention_mask=attention_mask,
-            return_dict=False,
+            s=self.s,
+            a=self.a,
+            r=self.r,
+            artg_hat=self.artg_hat,
+            mask=mask,
         )
 
         return state_preds[:, -1:, :], action_preds[:, -1:, :], R_preds[:, -1:, :]

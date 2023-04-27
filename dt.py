@@ -1,93 +1,95 @@
 import torch as T
 import torch.nn as nn
-import transformers
+import torch.nn.functional as F
 
 
 class DecisionTransformer(nn.Module):
     def __init__(
         self,
-        state_dim=768,
-        act_dim=8,
-        n_layers=3,
-        n_heads=8,
-        n_positions=8192,
-        min_action=None,
-        max_action=None,
+        d_state=768,
+        d_act=3,
+        d_reward=1,
+        n_layer=12,
+        padding=0,
+        n_head=8,
+        n_position=8192,
+        dropout=0.1,
+        mu_activation=F.tanh,
+        cov_activation=F.relu,
         file="actor.pt",
-        dtype=T.float32,
+        dtype=T.bfloat16,
         device="cuda",
     ):
         super().__init__()
         self.dtype = dtype
         self.device = device
 
+        self.d_state = d_state
+        self.d_act = d_act
+        self.n_layer = n_layer
+        self.padding = padding
+        self.n_head = n_head
+        self.n_position = n_position
+        self.mu_activation = mu_activation
+        self.cov_activation = cov_activation
+
+        d_model = d_state + d_act + d_act**2 + d_reward * 2
+        self.d_model = d_model
+
         self.file = file
 
-        self.state_dim = state_dim
-        self.act_dim = act_dim
-
-        self.min_action = min_action
-        self.max_action = max_action
-
         # crashes if length is greater than n_positions
-        config = transformers.DecisionTransformerConfig(
-            state_dim=state_dim,
-            act_dim=act_dim + act_dim**2,
-            n_positions=n_positions,
-            n_layer=n_layers,
-            n_head=n_heads,
-            action_tanh=True,
-            activation_function="gelu_new",
+        # attention = HyenaOperator()
+        layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=n_head,
+            dropout=dropout,
+            activation=F.mish,
+            dtype=dtype,
+            device=device,
         )
-        self.transformer = transformers.DecisionTransformerModel(config)
+        # layer.self_attn = attention
+        self.transformer = nn.TransformerEncoder(
+            layer, num_layers=n_layer, norm=nn.LayerNorm(d_model)
+        )
 
         self.to(dtype=dtype, device=device)
 
-    def forward(self, *args, **kwargs):
-        cov_pad = T.zeros(
+    def forward(self, s, a, r, artg_hat, mask=None):
+        x = T.cat(
             [
-                kwargs["actions"].shape[-3],
-                kwargs["actions"].shape[-2],
-                self.act_dim**2,
-            ],
-            dtype=self.dtype,
-            device=self.device,
-        )
-        kwargs["actions"] = T.cat([kwargs["actions"], cov_pad], dim=-1)
-
-        state_preds, action_preds, reward_preds = self.transformer(*args, **kwargs)
-        if action_preds.isnan().any():
-            print(action_preds)
-
-        return (
-            state_preds,
-            action_preds,
-            reward_preds,
+                s,
+                a.detach(),
+                T.zeros(a.shape[0], a.shape[1], self.d_act**2),
+                r,
+                artg_hat,
+            ]
         )
 
-    def split(self, actions):
-        mu = actions[:, :, : self.act_dim]
-        if self.min_action and self.max_action:
-            mu = self.min_action + mu * (self.max_action - self.min_action)
+        s_hat, a, r_hat, artg_hat = self.transformer(x, mask=None)
+
+        mu, cov = self.split(a)
+        mu = self.mu_activation(mu)
+        cov = self.mu_activation(cov)
+        a = self.sample(mu, cov)
+
+        return s_hat, a, mu, cov, r_hat, artg_hat
+
+    def split(self, a):
+        mu = a[:, :, : self.d_act]
         mu = mu.reshape(mu.shape[0], mu.shape[-1])
-        cov = actions[:, :, self.act_dim :].reshape(
-            actions.shape[0], self.act_dim, self.act_dim
-        )
+        cov = a[:, :, self.d_act :].reshape(a.shape[0], self.d_act, self.d_act)
         cov = T.abs(cov @ cov.permute(0, 2, 1))
 
         return mu, cov
 
-    def sample(self, actions):
-        mu, cov = self.split(actions)
+    def sample(self, mu, cov):
         dist = self.gaussian(mu, cov)
-        action = dist.rsample()
+        a = dist.rsample()
 
-        return action
+        return a
 
     def gaussian(self, mu, cov):
-        mu = mu if mu.dtype == T.float32 else mu.to(dtype=T.float32)
-        cov = cov if cov.dtype == T.float32 else cov.to(dtype=T.float32)
-
         return T.distributions.MultivariateNormal(loc=mu, covariance_matrix=cov)
 
     def save(self):
