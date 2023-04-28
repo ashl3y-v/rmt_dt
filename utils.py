@@ -1,52 +1,21 @@
 import torch as T
 import gymnasium as gym
-from replay_buffer import ReplayBuffer, init_replay_buffer
+from replay_buffer import ReplayBuffer
 
 
-def init_env(env_name, num_envs=3, **kwargs):
+def init_env(env_name, n_env=3, **kwargs):
     env = gym.vector.AsyncVectorEnv(
         [
             lambda: gym.make(env_name, **kwargs),
         ]
-        * num_envs,
+        * n_env,
         shared_memory=True,
     )
-    obs_dim = env.observation_space.shape
-    image_dim = (obs_dim[-1], obs_dim[1], obs_dim[2])
-    act_dim = env.action_space.shape[-1]
+    d_obs = env.observation_space.shape
+    d_img = (d_obs[-1], d_obs[1], d_obs[2])
+    d_act = env.action_space.shape[-1]
 
-    return env, obs_dim, image_dim, act_dim
-
-
-def reset_env(
-    env,
-    vit,
-    act_dim,
-    state_dim,
-    TARGET_RETURN,
-    num_envs=1,
-    block_size=10,
-    max_size=200,
-    dtype=T.float32,
-    device="cuda",
-):
-    observation, _ = env.reset()
-
-    state = vit(observation)
-
-    replay_buffer = init_replay_buffer(
-        state,
-        act_dim=act_dim,
-        state_dim=state_dim,
-        TARGET_RETURN=TARGET_RETURN,
-        num_envs=num_envs,
-        block_size=block_size,
-        max_size=max_size,
-        dtype=dtype,
-        device=device,
-    )
-
-    return replay_buffer
+    return env, d_obs, d_img, d_act
 
 
 def mean_range(contents, first, second, dim=0):

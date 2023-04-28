@@ -13,7 +13,7 @@ from dt import DecisionTransformer
 from critic import Critic
 from vit import ViT
 from trainer import Trainer
-from utils import init_env, reset_env
+from utils import ReplayBuffer, init_env
 
 T.manual_seed(42)
 
@@ -27,9 +27,6 @@ T.backends.cuda.matmul.allow_tf32 = True
 # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
 T.backends.cudnn.allow_tf32 = True
 
-# TODO:
-# use batch normalization maybe
-
 parser = argparse.ArgumentParser(
     prog="Train Decision Transformer", description="Does it", epilog="Made by Ashley :)"
 )
@@ -40,10 +37,10 @@ parser.add_argument("-sm", "--save_model", action="store_true")  # on/off flag
 
 args = parser.parse_args()
 
-TARGET_RETURN = 10000
 EPOCHS = int(args.timesteps)
+save_interval = 50
 device = "cuda" if T.cuda.is_available() else "cpu"
-dtype = T.float16
+dtype = T.bfloat16
 
 # T.set_autocast_gpu_dtype(amp_dtype)
 # T.set_autocast_cache_enabled(True)
@@ -52,19 +49,20 @@ dtype = T.float16
 # rewards = torch.tensor([], device=device)
 
 env_name = "CarRacing-v2"
-state_dim = 768
-n_positions = 8192
+d_state = 768
+d_reward = 1
+# n_positions = 8192
 
 steps_per_action = 5
 
-num_envs = 1
+n_env = 2
 
-env, obs_dim, image_dim, act_dim = init_env(env_name, num_envs=num_envs)
+env, d_obs, d_img, d_act = init_env(env_name, n_env=n_env)
 
 model = DecisionTransformer(
-    state_dim=state_dim,
-    act_dim=act_dim,
-    n_positions=n_positions,
+    d_state=d_state,
+    d_act=d_act,
+    d_reward=d_reward,
     dtype=dtype,
     device=device,
 )
@@ -72,51 +70,44 @@ model = DecisionTransformer(
 if args.load_model:
     model.load()
 
-vit = ViT(image_dim=image_dim, num_envs=num_envs, dtype=dtype, device=device)
+vit = ViT(d_img=d_img, n_env=n_env, dtype=dtype, device=device)
 
-trainer = Trainer(model.parameters(), epochs=EPOCHS, use_lr_schedule=False)
+trainer = Trainer(model.parameters(), epochs=EPOCHS)
+
+replay_buffer = ReplayBuffer(
+    n_env=n_env,
+    d_state=d_state,
+    d_act=d_act,
+    d_reward=d_reward,
+    dtype=dtype,
+    device=device,
+)
+
 for e in range(EPOCHS):
     T.cuda.empty_cache()
 
-    replay_buffer = reset_env(
-        env,
-        vit,
-        act_dim,
-        state_dim,
-        TARGET_RETURN,
-        num_envs=num_envs,
-        max_size=150,
-        dtype=dtype,
-        device=device,
-    )
-    attention_mask = T.ones(
-        [num_envs, replay_buffer.length()], dtype=dtype, device=device
-    )
+    obs, _ = env.reset()
+    replay_buffer.clear()
 
-    terminated = truncated = T.tensor([False] * num_envs)
+    terminated = truncated = T.tensor([False] * n_env)
     while not (terminated + truncated).all():
-        state_pred, action_pred, R_pred = replay_buffer.predict(model, attention_mask)
+        s_hat, a, mu, cov, r_hat, artg_hat = replay_buffer.predict(model)
 
-        action = model.sample(action_pred)
-        action_np = action.detach().cpu().numpy()
-        action = action.to(dtype=dtype)
+        a_np = a.detach().cpu().numpy()
+        a = a.to(dtype=dtype)
 
         for _ in range(steps_per_action):
-            observation, reward, terminated, truncated, info = env.step(action_np)
+            obs, r, terminated, truncated, info = env.step(a_np)
 
         terminated, truncated = T.tensor(terminated), T.tensor(truncated)
 
-        state = vit(observation).reshape([num_envs, 1, state_dim])
+        s = vit(obs)
 
-        reward = T.tensor(reward, device=device, requires_grad=False).reshape(
-            [num_envs, 1]
+        r = T.tensor(r, dtype=dtype, device=device, requires_grad=False).reshape(
+            [n_env, d_reward]
         )
 
-        replay_buffer.append(state, action, reward, R_pred, compress=True)
-
-        attention_mask = T.ones(
-            [num_envs, replay_buffer.length()], dtype=dtype, device=device
-        )
+        replay_buffer.append(s, a, r, artg_hat)
 
         # print("states", hist.states.shape[1], ", ", end="")
         # delete
@@ -127,27 +118,27 @@ for e in range(EPOCHS):
         #     terminated = True
 
         # don't delete
-        if replay_buffer.states.shape[1] == n_positions:
-            terminated = True
+        # if replay_buffer.length() == n_positions:
+        #     terminated = True
 
     # update Rs
-    total_reward, av_r = replay_buffer.R_update()
+    total_reward, av_r = replay_buffer.artg_update()
 
     # train (also do it right)
-    P_loss, R_loss = trainer.learn(replay_buffer)
+    artg_loss, policy_loss = trainer.learn(replay_buffer)
 
     print(
         e,
-        "P_loss:",
-        P_loss.item(),
-        "R_loss:",
-        R_loss.item(),
+        "artg loss:",
+        artg_loss.item(),
+        "policy loss:",
+        policy_loss.item(),
         "total_reward:",
         total_reward.item(),
         "average return",
         av_r.item(),
     )
 
-    if e % 50 == 0:
+    if e % save_interval == 0:
         if args.save_model:
             model.save()

@@ -7,16 +7,14 @@ import transformers
 
 
 class ViT(nn.Module):
-    def __init__(
-        self, image_dim=[3, 96, 96], num_envs=1, dtype=T.float32, device="cuda"
-    ):
+    def __init__(self, d_img=[3, 96, 96], n_env=1, dtype=T.bfloat16, device="cuda"):
         super().__init__()
         self.dtype = dtype
         self.device = device
 
         model_ckpt = "microsoft/beit-base-patch16-224-pt22k-ft22k"
-        self.image_dim = image_dim
-        self.num_envs = num_envs
+        self.d_img = d_img
+        self.n_env = n_env
         self.image_processor = transformers.AutoImageProcessor.from_pretrained(
             model_ckpt, do_resize=True, device=device
         )
@@ -29,17 +27,16 @@ class ViT(nn.Module):
         with T.inference_mode():
             o = (
                 T.from_numpy(o)
-                .to(dtype=self.dtype, device=self.device)
-                .reshape(self.num_envs, *self.image_dim)
+                .to(dtype=T.float32, device=self.device)
+                .reshape(self.n_env, *self.d_img)
             )
             o = self.image_processor.preprocess(o, return_tensors="pt").pixel_values.to(
                 dtype=self.dtype, device=self.device
             )
-            e = self.vit(o).to_tuple()
-            e = e[1].unsqueeze(0)
+            e = self.vit(o).to_tuple()[1]
 
         # needed
-        return e.detach().clone()
+        return e.detach().clone().unsqueeze(1)
 
 
 if __name__ == "__main__":
