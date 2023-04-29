@@ -24,12 +24,13 @@ class Trainer(nn.Module):
         self.steps_P = steps_P
         self.steps_R = steps_R
 
-        self.optim = Ranger21(
-            params=params,
-            lr=lr,
-            num_batches_per_epoch=steps_R + steps_P,
-            num_epochs=epochs,
-        )
+        # self.optim = Ranger21(
+        #     params=params,
+        #     lr=lr,
+        #     num_batches_per_epoch=steps_R + steps_P,
+        #     num_epochs=epochs,
+        # )
+        self.optim = T.optim.AdamW(params=params, lr=lr)
 
         # self.use_lr_schedule = use_lr_schedule
         # if use_lr_schedule:

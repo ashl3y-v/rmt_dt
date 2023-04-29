@@ -1,19 +1,17 @@
 import os
 import sys
 import argparse
-import time
 import random
 import numpy as np
 import torch as T
 from torch import nn
 from torch.nn import functional as F
 import gymnasium as gym
-from datetime import datetime
 from dt import DecisionTransformer
-from critic import Critic
 from vit import ViT
 from trainer import Trainer
-from utils import ReplayBuffer, init_env
+from matplotlib import pyplot as plt
+from replay_buffer import ReplayBuffer
 
 T.manual_seed(42)
 
@@ -48,21 +46,32 @@ dtype = T.bfloat16
 # losses = torch.tensor([], device=device)
 # rewards = torch.tensor([], device=device)
 
-env_name = "CarRacing-v2"
-d_state = 768
+env_name = "BipedalWalker-v3"  # "CarRacing-v2"
+d_state = 24  # 768
 d_reward = 1
 # n_positions = 8192
 
-steps_per_action = 5
+steps_per_action = 3
 
 n_env = 2
 
-env, d_obs, d_img, d_act = init_env(env_name, n_env=n_env)
+env = gym.vector.AsyncVectorEnv(
+    [
+        lambda: gym.make(env_name),
+    ]
+    * n_env,
+    shared_memory=True,
+)
+# d_obs = env.observation_space.shape
+# d_img = (d_obs[-1], d_obs[1], d_obs[2])
+d_act = env.action_space.shape[-1]
 
 model = DecisionTransformer(
     d_state=d_state,
     d_act=d_act,
-    d_reward=d_reward,
+    n_layer=12,
+    padding=0,
+    n_head=11,
     dtype=dtype,
     device=device,
 )
@@ -70,28 +79,32 @@ model = DecisionTransformer(
 if args.load_model:
     model.load()
 
-vit = ViT(d_img=d_img, n_env=n_env, dtype=dtype, device=device)
+# vit = ViT(d_img=d_img, n_env=n_env, dtype=dtype, device=device)
 
 trainer = Trainer(model.parameters(), epochs=EPOCHS)
 
-replay_buffer = ReplayBuffer(
-    n_env=n_env,
-    d_state=d_state,
-    d_act=d_act,
-    d_reward=d_reward,
-    dtype=dtype,
-    device=device,
-)
 
 for e in range(EPOCHS):
     T.cuda.empty_cache()
 
     obs, _ = env.reset()
-    replay_buffer.clear()
+    replay_buffer = ReplayBuffer(
+        n_env=n_env,
+        d_state=d_state,
+        d_act=d_act,
+        d_reward=d_reward,
+        dtype=dtype,
+        device=device,
+    )
 
     terminated = truncated = T.tensor([False] * n_env)
+    i = 0
     while not (terminated + truncated).all():
-        s_hat, a, mu, cov, r_hat, artg_hat = replay_buffer.predict(model)
+        i += 1
+
+        T.cuda.empty_cache()
+        # before = T.cuda.memory_reserved()
+        s_hat, a = replay_buffer.predict(model)
 
         a_np = a.detach().cpu().numpy()
         a = a.to(dtype=dtype)
@@ -101,13 +114,16 @@ for e in range(EPOCHS):
 
         terminated, truncated = T.tensor(terminated), T.tensor(truncated)
 
-        s = vit(obs)
+        # s = vit(obs)
+        s = T.from_numpy(obs).to(dtype=dtype, device=device).unsqueeze(1)
 
         r = T.tensor(r, dtype=dtype, device=device, requires_grad=False).reshape(
             [n_env, d_reward]
         )
 
-        replay_buffer.append(s, a, r, artg_hat)
+        replay_buffer.append(s, a, r)
+
+        print("mem", T.cuda.memory_reserved() / (140000 * i**2))
 
         # print("states", hist.states.shape[1], ", ", end="")
         # delete
@@ -130,13 +146,13 @@ for e in range(EPOCHS):
     print(
         e,
         "artg loss:",
-        artg_loss.item(),
+        artg_loss.mean().item(),
         "policy loss:",
-        policy_loss.item(),
+        policy_loss.mean().item(),
         "total_reward:",
-        total_reward.item(),
+        total_reward.mean().item(),
         "average return",
-        av_r.item(),
+        av_r.mean().item(),
     )
 
     if e % save_interval == 0:

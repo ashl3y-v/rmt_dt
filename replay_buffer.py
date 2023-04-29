@@ -9,7 +9,6 @@ class ReplayBuffer(nn.Module):
         s=None,
         a=None,
         r=None,
-        artg_hat=None,
         n_env=1,
         d_state=768,
         d_act=3,
@@ -26,43 +25,48 @@ class ReplayBuffer(nn.Module):
         self.d_act = d_act
         self.d_reward = d_reward
 
-        self.s = s or T.zeros(
-            [n_env, 1, d_state],
-            dtype=dtype,
-            device=device,
+        self.s = (
+            s
+            if s != None
+            else T.zeros(
+                [n_env, 1, d_state],
+                dtype=dtype,
+                device=device,
+            )
         )
-        self.a = a or T.zeros(
-            [n_env, 1, d_act],
-            dtype=dtype,
-            device=device,
+        self.a = (
+            a
+            if a != None
+            else T.zeros(
+                [n_env, 1, d_act],
+                dtype=dtype,
+                device=device,
+            )
         )
-        self.r = r or T.zeros(
-            [n_env, 1, d_reward],
-            dtype=dtype,
-            device=device,
-        )
-        self.artg_hat = artg_hat or T.zeros(
-            [n_env, 1, d_reward],
-            dtype=dtype,
-            device=device,
+        self.r = (
+            r
+            if r != None
+            else T.zeros(
+                [n_env, 1, d_reward],
+                dtype=dtype,
+                device=device,
+            )
         )
 
     def predict(self, model, mask=None):
-        s_hat, a, mu, cov, r_hat, artg_hat = model(
+        (s_hat, a) = model(
             s=self.s,
             a=self.a,
-            r=self.r,
-            artg_hat=self.artg_hat,
             mask=mask,
         )
 
-        return s_hat, a, mu, cov, r_hat, artg_hat
+        return s_hat, a
 
     # save proper stuff, backwards update Rs, format right
-    def append(self, s, a, r, artg_hat):
+    def append(self, s, a, r):
         assert a.dim() == 3 or a.dim() == 2
         assert r.dim() == 3 or r.dim() == 2 or r.dim() == 1
-        assert s.dtype == a.dtype == r.dtype == artg_hat.dtype == self.dtype
+        assert s.dtype == a.dtype == r.dtype == self.dtype
         if a.dim() == 2:
             a = a.unsqueeze(1)
         if r.dim() == 2:
@@ -76,19 +80,18 @@ class ReplayBuffer(nn.Module):
 
         self.r = T.cat([self.r, r], dim=1)
 
-        self.artg_hat = T.cat([self.artg_hat, artg_hat], dim=1)
-
     def length(self):
         return self.s.shape[1]
 
     def artg_update(self):
-        total_reward = self.r.sum()
-        av_r = total_reward / self.length()
-        self.artg = T.zeros(self.artg_hat.shape, device=self.device)
-        remaining_reward = total_reward.item()
-        for i in range(self.artg.shape[-2]):
-            self.artg[:, i, 0] = remaining_reward / (self.length() - i)
-            remaining_reward -= self.r[i, 0]
+        length = self.r.shape[1]
+        total_reward = self.r.sum(dim=1)
+        av_r = total_reward / length
+        self.artg = T.zeros(self.r.shape, dtype=self.dtype, device=self.device)
+        remaining_reward = total_reward  # clone ?
+        for i in range(length):
+            self.artg[:, i, :] = remaining_reward / (length - i)
+            remaining_reward -= self.r[:, i, :]
 
         return total_reward, av_r
 
@@ -104,11 +107,6 @@ class ReplayBuffer(nn.Module):
             device=self.device,
         )
         self.r = T.zeros(
-            [self.n_env, 1, self.d_reward],
-            dtype=self.dtype,
-            device=self.device,
-        )
-        self.artg_hat = T.zeros(
             [self.n_env, 1, self.d_reward],
             dtype=self.dtype,
             device=self.device,
@@ -138,6 +136,11 @@ class ReplayBuffer(nn.Module):
 
 if __name__ == "__main__":
     dtype = T.bfloat16
-    device = "cpu"
-    replay_buffer = ReplayBuffer(dtype=dtype, device=device)
-    print(replay_buffer.s.shape)
+    device = "cuda" if T.cuda.is_available() else "cpu"
+    replay_buffer = ReplayBuffer(
+        r=T.tensor([[0, 1, 2, 3, 4], [5, 4, 3, 2, 1]]).reshape([2, 5, 1]),
+        dtype=dtype,
+        device=device,
+    )
+    replay_buffer.artg_update()
+    print(replay_buffer.artg)
