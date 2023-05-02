@@ -1,6 +1,7 @@
 import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
+import transformers
 from positional_encodings.torch_encodings import (
     PositionalEncoding1D,
     PositionalEncoding2D,
@@ -13,12 +14,9 @@ class DecisionTransformer(nn.Module):
         d_state=768,
         d_act=3,
         n_layer=12,
-        padding=0,
         n_head=16,
-        dropout=0.1,
-        mu_activation=F.tanh,
-        cov_activation=F.mish,
-        file="actor.pt",
+        max_ep_len=4096,
+        n_positions=1024,
         dtype=T.bfloat16,
         device="cuda",
     ):
@@ -29,35 +27,40 @@ class DecisionTransformer(nn.Module):
         self.d_state = d_state
         self.d_act = d_act
         self.n_layer = n_layer
-        self.padding = padding
         self.n_head = n_head
-        self.mu_activation = mu_activation
-        self.cov_activation = cov_activation
 
-        d_model = d_state + d_act + d_act**2 + padding
-        self.d_model = d_model
-
-        self.file = file
-
-        self.pos_encoding = PositionalEncoding1D(d_model)
-        layer = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=n_head,
-            dropout=dropout,
-            activation=F.mish,
-            dtype=dtype,
-            device=device,
+        config = transformers.DecisionTransformerConfig(
+            state_dim=d_state,
+            act_dim=d_act,
+            n_layer=n_layer,
+            n_head=n_head,
+            max_ep_len=max_ep_len,
+            n_positions=n_positions,
         )
-        # layer.self_attn = attention
-        self.transformer = nn.TransformerEncoder(
-            layer,
-            num_layers=n_layer,
-            norm=nn.LayerNorm(d_model),
+        self.transformer = transformers.DecisionTransformerModel(config).to(
+            dtype=dtype, device=device
         )
 
         self.to(dtype=dtype, device=device)
 
-    def forward(self, s, a, mask=None):
+    def forward(self, s, a, r, mask=None):
+    s_hat, a, artg_hat = self.transformer(
+
+        states=s,
+
+        actions=a,
+
+        rewards=r,
+
+        returns_to_go=artg_hat,
+
+        timesteps=timesteps,
+
+        attention_mask=mask,
+
+        return_dict=False,
+
+    )
         b = s.shape[0]
         seq = s.shape[1]
         x = T.cat(
@@ -82,7 +85,7 @@ class DecisionTransformer(nn.Module):
         mu = self.mu_activation(mu)
         cov = self.cov_activation(cov)
         cov = cov @ cov.permute(0, 2, 1) + T.eye(
-            cov.shape[-1], dtype=self.dtype, device=self.device
+            cov.shape[-1], dtype=cov.dtype, device=cov.device
         ).expand([2, -1, -1])
         a = self.sample(mu, cov)
 

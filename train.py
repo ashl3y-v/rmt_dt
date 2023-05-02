@@ -49,7 +49,6 @@ dtype = T.bfloat16
 env_name = "BipedalWalker-v3"  # "CarRacing-v2"
 d_state = 24  # 768
 d_reward = 1
-# n_positions = 8192
 
 steps_per_action = 3
 
@@ -126,9 +125,8 @@ for e in range(EPOCHS):
         print("mem", T.cuda.memory_reserved() / (140000 * i**2))
 
         # print("states", hist.states.shape[1], ", ", end="")
-        # delete
-        # if hist.states.shape[1] == 89:
-        #     terminated = True
+        if replay_buffer.length() == 90:
+            replay_buffer.detach(0, 90)
 
         # if replay_buffer.states.shape[1] == 200:
         #     terminated = True

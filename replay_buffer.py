@@ -113,6 +113,29 @@ class ReplayBuffer(nn.Module):
         )
         self.artg = None
 
+    def detach(self, i0, i1):
+        self.s = T.cat(
+            [
+                self.s[:, :i0, :],
+                self.s[:, i0:i1, :].detach(),
+                self.s[:, i1:, :],
+            ]
+        )
+        self.a = T.cat(
+            [
+                self.a[:, :i0, :],
+                self.a[:, i0:i1, :].detach(),
+                self.a[:, i1:, :],
+            ]
+        )
+        self.r = T.cat(
+            [
+                self.r[:, :i0, :],
+                self.r[:, i0:i1, :].detach(),
+                self.r[:, i1:, :],
+            ]
+        )
+
     # def compress_seq(self, seq, dim=0):
     #     n_blocks = (seq.shape[dim] - self.max_size) // self.block_size
     #     blocks = seq[:, : self.block_size * n_blocks, :]

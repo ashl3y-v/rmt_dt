@@ -6,24 +6,16 @@ import gymnasium as gym
 import matplotlib.pyplot as plt
 
 from pytorch_optimizer import Ranger21
-from utils import mean_range
+from performer_pytorch import Performer
 
 T.manual_seed(42)
 
 dtype = T.bfloat16
 device = "cuda" if T.cuda.is_available() else "cpu"
 
-env = gym.make("CarRacing-v2")
+model = Performer(dim=512, dim_head=512, depth=1, heads=8, causal=True)
 
-obs, _ = env.reset()
+x = T.randn(1, 2048, 512)
+r = model(x)
 
-for i in range(20):
-    obs, r, terminated, truncated, info = env.step(env.action_space.sample())
-
-obs = T.tensor(obs, dtype=dtype, device=device).permute(2, 0, 1) / 255
-pool = nn.MaxPool2d(4)
-obs = pool(obs)
-print(obs.shape)
-plt.matshow(obs.cpu().to(dtype=T.float32).permute(1, 2, 0))
-
-plt.show()
+print(r.shape)
