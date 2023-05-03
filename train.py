@@ -68,9 +68,6 @@ d_act = env.action_space.shape[-1]
 model = DecisionTransformer(
     d_state=d_state,
     d_act=d_act,
-    n_layer=12,
-    padding=0,
-    n_head=11,
     dtype=dtype,
     device=device,
 )
@@ -103,7 +100,7 @@ for e in range(EPOCHS):
 
         T.cuda.empty_cache()
         # before = T.cuda.memory_reserved()
-        s_hat, a = replay_buffer.predict(model)
+        s_hat, a, artg_hat = replay_buffer.predict(model)
 
         a_np = a.detach().cpu().numpy()
         a = a.to(dtype=dtype)
@@ -120,7 +117,7 @@ for e in range(EPOCHS):
             [n_env, d_reward]
         )
 
-        replay_buffer.append(s, a, r)
+        replay_buffer.append(s, a, r, artg_hat)
 
         print("mem", T.cuda.memory_reserved() / (140000 * i**2))
 

@@ -13,10 +13,12 @@ class DecisionTransformer(nn.Module):
         self,
         d_state=768,
         d_act=3,
-        n_layer=12,
+        n_layer=16,
         n_head=16,
+        min_a=-1,
+        max_a=1,
         max_ep_len=4096,
-        n_positions=1024,
+        n_positions=4096,
         dtype=T.bfloat16,
         device="cuda",
     ):
@@ -28,10 +30,12 @@ class DecisionTransformer(nn.Module):
         self.d_act = d_act
         self.n_layer = n_layer
         self.n_head = n_head
+        self.min_a = min_a
+        self.max_a = max_a
 
         config = transformers.DecisionTransformerConfig(
             state_dim=d_state,
-            act_dim=d_act,
+            act_dim=d_act + d_act**2,
             n_layer=n_layer,
             n_head=n_head,
             max_ep_len=max_ep_len,
@@ -43,65 +47,62 @@ class DecisionTransformer(nn.Module):
 
         self.to(dtype=dtype, device=device)
 
-    def forward(self, s, a, r, mask=None):
-    s_hat, a, artg_hat = self.transformer(
-
-        states=s,
-
-        actions=a,
-
-        rewards=r,
-
-        returns_to_go=artg_hat,
-
-        timesteps=timesteps,
-
-        attention_mask=mask,
-
-        return_dict=False,
-
-    )
-        b = s.shape[0]
-        seq = s.shape[1]
-        x = T.cat(
+    def forward(
+        self,
+        s: T.Tensor,
+        a: T.Tensor,
+        r: T.Tensor,
+        artg_hat: T.Tensor,
+        timestep: T.Tensor or int,
+        mask=None,
+    ):
+        if isinstance(timestep, int):
+            timestep = T.tensor(timestep, dtype=T.long, device=self.device)
+        a = T.cat(
             [
-                s.detach(),
                 a.detach(),
-                T.zeros(b, seq, self.d_act**2, dtype=self.dtype, device=self.device),
-                T.zeros(b, seq, self.padding, dtype=self.dtype, device=self.device),
+                T.zeros(
+                    a.shape[0],
+                    a.shape[1],
+                    self.d_act**2,
+                    dtype=self.dtype,
+                    device=self.device,
+                ),
             ],
             dim=-1,
         )
-        x = x + self.pos_encoding(x)
+        s_hat, a, artg_hat = self.transformer(
+            states=s.detach(),
+            actions=a.detach(),
+            rewards=r,
+            returns_to_go=artg_hat.detach(),
+            timesteps=timestep,
+            attention_mask=mask,
+            return_dict=False,
+        )
+        s_hat, a, artg_hat = s_hat[:, -1:, :], a[:, -1:, :], artg_hat[:, -1:, :]
 
-        x = self.transformer(x, mask=mask)
-        x = x[:, -1:, :]
-
-        (
-            s_hat,
-            a,
-        ) = self.split(x)
         mu, cov = self.split_a(a.to(dtype=T.float32))
-        mu = self.mu_activation(mu)
-        cov = self.cov_activation(cov)
         cov = cov @ cov.permute(0, 2, 1) + T.eye(
             cov.shape[-1], dtype=cov.dtype, device=cov.device
-        ).expand([2, -1, -1])
+        ).expand([cov.shape[0], -1, -1])
         a = self.sample(mu, cov)
+        a = self.min_a + a * (self.max_a - self.min_a)
 
-        return s_hat, a
+        return s_hat, a, artg_hat
 
-    def split(self, x):
-        s_hat, a, padding = T.split(
-            x,
-            [self.d_state, self.d_act + self.d_act**2, self.padding],
-            dim=-1,
-        )
-
-        return s_hat, a
+    # def split(self, x):
+    #     s_hat, a, padding = T.split(
+    #         x,
+    #         [self.d_state, self.d_act + self.d_act**2, self.padding],
+    #         dim=-1,
+    #     )
+    #
+    #     return s_hat, a
 
     def split_a(self, a):
         mu = a[:, :, : self.d_act]
+        print(mu.shape)
         mu = mu.reshape(mu.shape[0], mu.shape[-1])
         cov = a[:, :, self.d_act :].reshape(a.shape[0], self.d_act, self.d_act)
 

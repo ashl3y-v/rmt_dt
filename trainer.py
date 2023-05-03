@@ -45,22 +45,31 @@ class Trainer(nn.Module):
 
     def learn(self, replay_buffer):
         # manual gradient clipping needed? <- ranger
-        for _ in range(self.steps_R):
-            self.optim.zero_grad(set_to_none=True)
-            artg_loss = self.huber(replay_buffer.artg_hat, replay_buffer.artg)
-            artg_loss.backward(retain_graph=True)
-            # T.nn.utils.clip_grad_norm_(self.params, self.clip)
-            self.optim.step()
-            # if self.use_lr_schedule:
-            #     self.lr_scheduler.step()
+        self.optim.zero_grad(set_to_none=True)
+        pg_loss = replay_buffer.prob * replay_buffer.artg
+        artg_loss = self.huber(replay_buffer.artg_hat, replay_buffer.artg)
+        loss = pg_loss + artg_loss
+        loss.backward(retain_graph=True)
+        T.nn.utils.clip_grad_norm_(self.params, self.clip)
+        self.optim.step()
+        if self.use_lr_schedule:
+            self.lr_scheduler.step()
+        # for _ in range(self.steps_R):
+        #     self.optim.zero_grad(set_to_none=True)
+        #     artg_loss = self.huber(replay_buffer.artg_hat, replay_buffer.artg)
+        #     artg_loss.backward(retain_graph=True)
+        #     # T.nn.utils.clip_grad_norm_(self.params, self.clip)
+        #     self.optim.step()
+        #     # if self.use_lr_schedule:
+        #     #     self.lr_scheduler.step()
+        #
+        # for _ in range(self.steps_P):
+        #     self.optim.zero_grad(set_to_none=True)
+        #     policy_loss = -replay_buffer.artg_hat.mean()
+        #     policy_loss.backward(retain_graph=True)
+        #     # T.nn.utils.clip_grad_norm_(self.params, self.clip)
+        #     self.optim.step()
+        #     # if self.use_lr_schedule:
+        #     #     self.lr_scheduler.step()
 
-        for _ in range(self.steps_P):
-            self.optim.zero_grad(set_to_none=True)
-            policy_loss = -replay_buffer.artg_hat.mean()
-            policy_loss.backward(retain_graph=True)
-            # T.nn.utils.clip_grad_norm_(self.params, self.clip)
-            self.optim.step()
-            # if self.use_lr_schedule:
-            #     self.lr_scheduler.step()
-
-        return artg_loss, policy_loss
+        return pg_loss.item(), artg_loss.item()  # artg_loss, policy_loss
