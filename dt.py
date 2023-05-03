@@ -2,10 +2,6 @@ import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
 import transformers
-from positional_encodings.torch_encodings import (
-    PositionalEncoding1D,
-    PositionalEncoding2D,
-)
 
 
 class DecisionTransformer(nn.Module):
@@ -60,7 +56,7 @@ class DecisionTransformer(nn.Module):
             timestep = T.tensor(timestep, dtype=T.long, device=self.device)
         a = T.cat(
             [
-                a.detach(),
+                a,
                 T.zeros(
                     a.shape[0],
                     a.shape[1],
