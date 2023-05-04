@@ -53,7 +53,8 @@ class DecisionTransformer(nn.Module):
         mask=None,
     ):
         if isinstance(timestep, int):
-            timestep = T.tensor(timestep, dtype=T.long, device=self.device)
+            timestep = T.tensor(timestep, dtype=T.long, device=self.device).reshape([1, 1])
+        mask = mask or T.ones([s.shape[0], s.shape[1]], dtype=self.dtype, device=self.device)
         a = T.cat(
             [
                 a,
@@ -70,10 +71,10 @@ class DecisionTransformer(nn.Module):
         s_hat, a, artg_hat = self.transformer(
             states=s.detach(),
             actions=a.detach(),
-            rewards=r,
+            rewards=r.detach(),
             returns_to_go=artg_hat.detach(),
-            timesteps=timestep,
-            attention_mask=mask,
+            timesteps=timestep.detach(),
+            attention_mask=mask.detach(),
             return_dict=False,
         )
         s_hat, a, artg_hat = s_hat[:, -1:, :], a[:, -1:, :], artg_hat[:, -1:, :]
@@ -82,10 +83,10 @@ class DecisionTransformer(nn.Module):
         cov = cov @ cov.permute(0, 2, 1) + T.eye(
             cov.shape[-1], dtype=cov.dtype, device=cov.device
         ).expand([cov.shape[0], -1, -1])
-        a = self.sample(mu, cov)
+        a, prob = self.sample(mu, cov)
         a = self.min_a + a * (self.max_a - self.min_a)
 
-        return s_hat, a, artg_hat
+        return s_hat, a, prob, artg_hat
 
     # def split(self, x):
     #     s_hat, a, padding = T.split(
@@ -98,7 +99,6 @@ class DecisionTransformer(nn.Module):
 
     def split_a(self, a):
         mu = a[:, :, : self.d_act]
-        print(mu.shape)
         mu = mu.reshape(mu.shape[0], mu.shape[-1])
         cov = a[:, :, self.d_act :].reshape(a.shape[0], self.d_act, self.d_act)
 
@@ -107,8 +107,9 @@ class DecisionTransformer(nn.Module):
     def sample(self, mu, cov):
         dist = self.gaussian(mu, cov)
         a = dist.rsample()
+        prob = T.exp(dist.log_prob(a))
 
-        return a
+        return a, prob
 
     def gaussian(self, mu, cov):
         return T.distributions.MultivariateNormal(loc=mu, covariance_matrix=cov)

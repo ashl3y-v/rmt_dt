@@ -10,6 +10,7 @@ class ReplayBuffer(nn.Module):
         a=None,
         r=None,
         artg_hat=None,
+        prob=None,
         n_env=1,
         d_state=768,
         d_act=3,
@@ -62,16 +63,25 @@ class ReplayBuffer(nn.Module):
                 device=device,
             )
         )
+        self.prob = (
+            prob
+            if prob != None
+            else T.zeros(
+                [n_env, 1, 1],
+                dtype=dtype,
+                device=device,
+            )
+        )
 
     def predict(self, model, mask=None):
-        s_hat, a, artg_hat = model(
+        s_hat, a, prob, artg_hat = model(
             self.s, self.a, self.r, self.artg_hat, self.s.shape[0], mask=mask
         )
 
-        return s_hat, a, artg_hat
+        return s_hat, a, prob, artg_hat
 
     # save proper stuff, backwards update Rs, format right
-    def append(self, s, a, r, artg_hat):
+    def append(self, s, a, r, artg_hat, prob):
         assert a.dim() == 3 or a.dim() == 2
         assert r.dim() == 3 or r.dim() == 2 or r.dim() == 1
         assert s.dtype == a.dtype == r.dtype == self.dtype
@@ -85,6 +95,10 @@ class ReplayBuffer(nn.Module):
             artg_hat = artg_hat.unsqueeze(0).unsqueeze(0)
         elif artg_hat.dim() == 2:
             artg_hat = artg_hat.unsqueeze(1)
+        if prob.dim() == 1:
+            prob = prob.unsqueeze(-1).unsqueeze(-1)
+        elif prob.dim() == 2:
+            prob = prob.unsqueeze(-1)
 
         self.s = T.cat([self.s, s], dim=1)
 
@@ -93,6 +107,8 @@ class ReplayBuffer(nn.Module):
         self.r = T.cat([self.r, r], dim=1)
 
         self.artg_hat = T.cat([self.artg_hat, artg_hat], dim=1)
+
+        self.prob = T.cat([self.prob, prob], dim=1)
 
     def length(self):
         return self.s.shape[1]

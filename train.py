@@ -12,8 +12,9 @@ from vit import ViT
 from trainer import Trainer
 from matplotlib import pyplot as plt
 from replay_buffer import ReplayBuffer
+import lightning as L
 
-T.manual_seed(42)
+T.manual_seed(0)
 
 # this probably does nothing
 T.backends.cudnn.benchmark = True
@@ -99,8 +100,8 @@ for e in range(EPOCHS):
         i += 1
 
         T.cuda.empty_cache()
-        # before = T.cuda.memory_reserved()
-        s_hat, a, artg_hat = replay_buffer.predict(model)
+        before = T.cuda.memory_reserved()
+        s_hat, a, prob, artg_hat = replay_buffer.predict(model)
 
         a_np = a.detach().cpu().numpy()
         a = a.to(dtype=dtype)
@@ -117,13 +118,15 @@ for e in range(EPOCHS):
             [n_env, d_reward]
         )
 
-        replay_buffer.append(s, a, r, artg_hat)
+        replay_buffer.append(s.detach(), a.detach(), r.detach(), artg_hat.detach(), prob)
 
-        print("mem", T.cuda.memory_reserved() / (140000 * i**2))
+        print("delta", (T.cuda.memory_reserved() - before) / replay_buffer.s.shape[1])
+        print("mem", T.cuda.memory_reserved() / i**2)
 
         # print("states", hist.states.shape[1], ", ", end="")
-        if replay_buffer.length() == 90:
-            replay_buffer.detach(0, 90)
+        # errors
+        # if replay_buffer.length() == 90:
+        #     replay_buffer.detach(0, 90)
 
         # if replay_buffer.states.shape[1] == 200:
         #     terminated = True
