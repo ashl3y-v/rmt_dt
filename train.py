@@ -16,7 +16,6 @@ import lightning as L
 
 T.manual_seed(0)
 
-# this probably does nothing
 T.backends.cudnn.benchmark = True
 
 T.autograd.set_detect_anomaly(True)
