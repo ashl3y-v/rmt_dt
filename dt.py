@@ -53,8 +53,12 @@ class DecisionTransformer(nn.Module):
         mask=None,
     ):
         if isinstance(timestep, int):
-            timestep = T.tensor(timestep, dtype=T.long, device=self.device).reshape([1, 1])
-        mask = mask or T.ones([s.shape[0], s.shape[1]], dtype=self.dtype, device=self.device)
+            timestep = T.tensor(timestep, dtype=T.long, device=self.device).reshape(
+                [1, 1]
+            )
+        mask = mask or T.ones(
+            [s.shape[0], s.shape[1]], dtype=self.dtype, device=self.device
+        )
         a = T.cat(
             [
                 a,
