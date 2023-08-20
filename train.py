@@ -1,18 +1,12 @@
-import os
-import sys
 import argparse
-import random
-import numpy as np
 import torch as T
 from torch import nn
 from torch.nn import functional as F
 import gymnasium as gym
-from dt import DecisionTransformer
-from vit import ViT
-from trainer import Trainer
+# from dt import DecisionTransformer
+# from vit import ViT
 from matplotlib import pyplot as plt
 from replay_buffer import ReplayBuffer
-import lightning as L
 
 T.manual_seed(0)
 
@@ -46,7 +40,7 @@ dtype = T.bfloat16
 # losses = torch.tensor([], device=device)
 # rewards = torch.tensor([], device=device)
 
-env_name = "BipedalWalker-v3"  # "CarRacing-v2"
+env_name = "CarRacing-v2"
 d_state = 24  # 768
 d_reward = 1
 
@@ -61,9 +55,10 @@ env = gym.vector.AsyncVectorEnv(
     * n_env,
     shared_memory=True,
 )
-# d_obs = env.observation_space.shape
+d_obs = env.observation_space.shape
 # d_img = (d_obs[-1], d_obs[1], d_obs[2])
 d_act = env.action_space.shape[-1]
+print(d_obs)
 
 model = DecisionTransformer(
     d_state=d_state,
