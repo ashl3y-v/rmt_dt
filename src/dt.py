@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 from torchrl import *
 
+
 class Residual(nn.Module):
     def __init__(self, f: nn.Module, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -26,7 +27,7 @@ def _tokenizer(
     s: list = [2, 2, 2, 2, 2, 1],
     p: list = [3, 3, 3, 3, 3, 0],
     dtype=T.bfloat16,
-    device=T.device("cuda")
+    device=T.device("cuda"),
 ):
     assert len(c) - 1 == len(k) == len(s) == len(p)
     n = len(k)
@@ -50,121 +51,89 @@ def _tokenizer(
 class DT(nn.Module):
     def __init__(
         self,
-        d_state=96,
+        d_obs=96,
         d_act=3,
-        d_rew = 1,
-        d_mem=147,
-        d_segment=8,
-        n_layer=16,
+        d_rew=1,
+        d_mem=8,
+        d_seg=8,
+        n_layer=8,
         n_head=16,
         min_a=T.tensor([-1, 0, 0]),
         max_a=T.tensor([1, 1, 1]),
-        dtype = T.bfloat16,
-        device = T.device("cuda")
+        dropout=0.1,
+        dtype=T.bfloat16,
+        device=T.device("cuda"),
     ):
         super().__init__()
         self.dtype = dtype
         self.device = device
 
-        self.d_state = d_state
+        d_emb = d_obs + d_act + d_act**2 + 2 * d_rew
+
+        self.d_state = d_obs
         self.d_act = d_act
         self.d_rew = d_rew
         self.d_mem = d_mem
-        self.d_segment = d_segment
+        self.d_seg = d_seg
         self.n_layer = n_layer
         self.n_head = n_head
-
-        self.d_emb = d_state + d_act + d_act ** 2 + d_rew
+        self.d_emb = d_emb
 
         self.min_a = min_a.to(dtype=dtype, device=device)
         self.max_a = max_a.to(dtype=dtype, device=device)
 
         self.tokenizer = _tokenizer(dtype=dtype, device=device)
 
-        self.emb = nn.Embedding(d_segment, d_emb)
+        self.embedding = nn.Embedding(d_seg, d_emb)
 
-        # self.to(dtype=dtype, device=device)
-
-    def forward(
-        self,
-        s: T.Tensor,
-        a: T.Tensor,
-        r: T.Tensor,
-        artg_hat: T.Tensor,
-        timestep: T.Tensor or int,
-        mask=None,
-    ):
-        if isinstance(timestep, int):
-            timestep = T.tensor(timestep, dtype=T.long, device=self.device).reshape(
-                [1, 1]
-            )
-        mask = mask or T.ones(
-            [s.shape[0], s.shape[1]], dtype=self.dtype, device=self.device
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_emb,
+            n_head,
+            dim_feedforward=512,
+            dropout=dropout,
+            activation=F.mish,
+            batch_first=True,
         )
-        a = T.cat(
-            [
-                a,
-                T.zeros(
-                    a.shape[0],
-                    a.shape[1],
-                    self.d_act**2,
-                    dtype=self.dtype,
-                    device=self.device,
-                ),
-            ],
+
+        self.encoder = nn.TransformerEncoder(encoder_layer, n_layer)
+
+        self.to(dtype=dtype, device=device)
+
+    def forward(self, x: T.Tensor):
+        # x: [d_seg + d_mem, d_emb]
+
+        print(x.shape)
+
+        pos = self.emb(
+            T.arange(self.d_seg + self.d_mem, dtype=self.dtype, device=self.device)
+        )
+
+        x = x + pos
+
+        x_h = self.encoder(x)
+
+        # mu, cov = self.split_a(a.to(dtype=T.float32))
+        # cov = cov @ cov.permute(0, 2, 1) + T.eye(
+        #     cov.shape[-1], dtype=cov.dtype, device=cov.device
+        # ).expand([cov.shape[0], -1, -1])
+        # a, prob = self.sample(mu, cov)
+        # a = self.min_a + a * (self.max_a - self.min_a)
+        #
+        # return s_hat, a, prob, artg_hat
+
+    def split(self, x: T.Tensor):
+        return T.split(
+            x,
+            [self.d_obs + self.d_act + self.d_act**2 + 2 * self.d_rew],
             dim=-1,
         )
-        s_hat, a, artg_hat = self.transformer(
-            states=s.detach(),
-            actions=a.detach(),
-            rewards=r.detach(),
-            returns_to_go=artg_hat.detach(),
-            timesteps=timestep.detach(),
-            attention_mask=mask.detach(),
-            return_dict=False,
-        )
-        s_hat, a, artg_hat = s_hat[:, -1:, :], a[:, -1:, :], artg_hat[:, -1:, :]
-
-        mu, cov = self.split_a(a.to(dtype=T.float32))
-        cov = cov @ cov.permute(0, 2, 1) + T.eye(
-            cov.shape[-1], dtype=cov.dtype, device=cov.device
-        ).expand([cov.shape[0], -1, -1])
-        a, prob = self.sample(mu, cov)
-        a = self.min_a + a * (self.max_a - self.min_a)
-
-        return s_hat, a, prob, artg_hat
-
-    # def split(self, x):
-    #     s_hat, a, padding = T.split(
-    #         x,
-    #         [self.d_state, self.d_act + self.d_act**2, self.padding],
-    #         dim=-1,
-    #     )
-    #
-    #     return s_hat, a
 
     def split_a(self, a):
-        mu = a[:, :, : self.d_act]
-        mu = mu.reshape(mu.shape[0], mu.shape[-1])
-        cov = a[:, :, self.d_act :].reshape(a.shape[0], self.d_act, self.d_act)
+        mu, cov = a[..., : self.d_act], a[..., self.d_act :]
+        mu = mu.squeeze(1)
+        cov = cov.reshape([a.shape[0], self.d_act, self.d_act])
 
         return mu, cov
-
-    def sample(self, mu, cov):
-        dist = self.gaussian(mu, cov)
-        a = dist.rsample()
-        prob = T.exp(dist.log_prob(a))
-
-        return a, prob
-
-    def gaussian(self, mu, cov):
-        return T.distributions.MultivariateNormal(loc=mu, covariance_matrix=cov)
-
-    def save(self):
-        T.save(self.state_dict(), self.file)
-
-    def load(self):
-        self.load_state_dict(T.load(self.file))
 
 
 if __name__ == "__main__":
