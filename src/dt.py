@@ -2,6 +2,7 @@ import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torchrl import *
 
 class Residual(nn.Module):
     def __init__(self, f: nn.Module, *args, **kwargs) -> None:
@@ -15,8 +16,7 @@ class Residual(nn.Module):
 
 def _unpack_rec(x: list) -> list:
     y = []
-    for i in range(len(x)):
-        y.extend(x[i])
+    [y.extend(x[i]) for i in range(len(x))]
     return y
 
 
@@ -25,6 +25,8 @@ def _tokenizer(
     k: list = [8, 8, 8, 8, 8, 3],
     s: list = [2, 2, 2, 2, 2, 1],
     p: list = [3, 3, 3, 3, 3, 0],
+    dtype=T.bfloat16,
+    device=T.device("cuda")
 ):
     assert len(c) - 1 == len(k) == len(s) == len(p)
     n = len(k)
@@ -41,23 +43,24 @@ def _tokenizer(
                 ]
             ),
             nn.Flatten(),
-        )
+        ).to(dtype=dtype, device=device)
     )
 
 
-class DecisionTransformer(nn.Module):
+class DT(nn.Module):
     def __init__(
         self,
-        d_state=768,
+        d_state=96,
         d_act=3,
+        d_rew = 1,
+        d_mem=147,
+        d_segment=8,
         n_layer=16,
         n_head=16,
-        min_a=-1,
-        max_a=1,
-        max_ep_len=4096,
-        n_positions=4096,
-        dtype=T.bfloat16,
-        device="cuda",
+        min_a=T.tensor([-1, 0, 0]),
+        max_a=T.tensor([1, 1, 1]),
+        dtype = T.bfloat16,
+        device = T.device("cuda")
     ):
         super().__init__()
         self.dtype = dtype
@@ -65,24 +68,22 @@ class DecisionTransformer(nn.Module):
 
         self.d_state = d_state
         self.d_act = d_act
+        self.d_rew = d_rew
+        self.d_mem = d_mem
+        self.d_segment = d_segment
         self.n_layer = n_layer
         self.n_head = n_head
-        self.min_a = min_a
-        self.max_a = max_a
 
-        config = transformers.DecisionTransformerConfig(
-            state_dim=d_state,
-            act_dim=d_act + d_act**2,
-            n_layer=n_layer,
-            n_head=n_head,
-            max_ep_len=max_ep_len,
-            n_positions=n_positions,
-        )
-        self.transformer = transformers.DecisionTransformerModel(config).to(
-            dtype=dtype, device=device
-        )
+        self.d_emb = d_state + d_act + d_act ** 2 + d_rew
 
-        self.to(dtype=dtype, device=device)
+        self.min_a = min_a.to(dtype=dtype, device=device)
+        self.max_a = max_a.to(dtype=dtype, device=device)
+
+        self.tokenizer = _tokenizer(dtype=dtype, device=device)
+
+        self.emb = nn.Embedding(d_segment, d_emb)
+
+        # self.to(dtype=dtype, device=device)
 
     def forward(
         self,
@@ -168,15 +169,18 @@ class DecisionTransformer(nn.Module):
 
 if __name__ == "__main__":
     dtype = T.bfloat16
-    device = "cuda" if T.cuda.is_available() else "cpu"
+    device = T.device("cuda" if T.cuda.is_available() else "cpu")
 
-    dt = DecisionTransformer(dtype=dtype, device=device)
+    # tok = _tokenizer()
+    dt = DT().to(dtype=dtype, device=device)
+    print(dt.max_a.dtype, dt.max_a.device)
 
-    batches = 2
-    seq_len = 69
-    s = T.randn(batches, seq_len, 768, dtype=dtype, device=device)
-    a = T.randn([batches, seq_len, 3], dtype=dtype, device=device)
-    r = T.randn([batches, seq_len, 1], dtype=dtype, device=device)
-    artg_hat = T.randn([batches, seq_len, 1], dtype=dtype, device=device)
-    s_hat, a, mu, cov, r_hat, artg_hat = dt(s, a, r, artg_hat)
-    print(s_hat.shape, a.shape, mu.shape, cov.shape, r_hat.shape, artg_hat.shape)
+    #
+    # batches = 2
+    # seq_len = 69
+    # s = T.randn(batches, seq_len, 768, dtype=dtype, device=device)
+    # a = T.randn([batches, seq_len, 3], dtype=dtype, device=device)
+    # r = T.randn([batches, seq_len, 1], dtype=dtype, device=device)
+    # artg_hat = T.randn([batches, seq_len, 1], dtype=dtype, device=device)
+    # s_hat, a, mu, cov, r_hat, artg_hat = dt(s, a, r, artg_hat)
+    # print(s_hat.shape, a.shape, mu.shape, cov.shape, r_hat.shape, artg_hat.shape)
