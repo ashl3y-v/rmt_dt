@@ -2,8 +2,6 @@ import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torchrl import *
-
 
 class Residual(nn.Module):
     def __init__(self, f: nn.Module, *args, **kwargs) -> None:
@@ -26,8 +24,8 @@ def _tokenizer(
     k: list = [8, 8, 8, 8, 8, 3],
     s: list = [2, 2, 2, 2, 2, 1],
     p: list = [3, 3, 3, 3, 3, 0],
-    dtype=T.bfloat16,
-    device=T.device("cuda"),
+    device: T.device = T.device("cuda"),
+    dtype: T.dtype = T.bfloat16,
 ):
     assert len(c) - 1 == len(k) == len(s) == len(p)
     n = len(k)
@@ -51,89 +49,68 @@ def _tokenizer(
 class DT(nn.Module):
     def __init__(
         self,
-        d_obs=96,
-        d_act=3,
-        d_rew=1,
-        d_mem=8,
-        d_seg=8,
-        n_layer=8,
-        n_head=16,
+        d_s: int = 96,
+        d_a: int = 3,
+        d_r: int = 1,
+        d_padding: int = 0,
+        l_obs: int = 16,
+        l_mem: int = 8,
+        n_layer: int = 4,
+        n_head: int = 10,
         min_a=T.tensor([-1, 0, 0]),
         max_a=T.tensor([1, 1, 1]),
-        dropout=0.1,
-        dtype=T.bfloat16,
-        device=T.device("cuda"),
+        dropout: float = 0.1,
+        device: T.device = T.device("cuda"),
+        dtype: T.dtype = T.bfloat16,
     ):
         super().__init__()
-        self.dtype = dtype
         self.device = device
+        self.dtype = dtype
 
-        d_emb = d_obs + d_act + d_act**2 + 2 * d_rew
+        self.d_s = d_s
+        self.d_a = d_a
+        self.d_r = d_r
+        self.d_padding = d_padding
+        self.d_emb = d_s + d_a + d_r + d_padding
 
-        self.d_state = d_obs
-        self.d_act = d_act
-        self.d_rew = d_rew
-        self.d_mem = d_mem
-        self.d_seg = d_seg
+        self.l_obs = l_obs
+        self.l_mem = l_mem
+        self.l_seg = l_obs + l_mem
+
         self.n_layer = n_layer
         self.n_head = n_head
-        self.d_emb = d_emb
 
-        self.min_a = min_a.to(dtype=dtype, device=device)
-        self.max_a = max_a.to(dtype=dtype, device=device)
+        self.min_a = min_a.to(device=device, dtype=dtype)
+        self.max_a = max_a.to(device=device, dtype=dtype)
 
-        self.tokenizer = _tokenizer(dtype=dtype, device=device)
+        self.tokenizer = _tokenizer(device=device, dtype=dtype)
 
-        self.embedding = nn.Embedding(d_seg, d_emb)
+        self.embedding = nn.Embedding(
+            self.l_seg, self.d_emb, device=device, dtype=dtype
+        )
 
         encoder_layer = nn.TransformerEncoderLayer(
-            d_emb,
+            self.d_emb,
             n_head,
-            dim_feedforward=512,
             dropout=dropout,
-            activation=F.mish,
             batch_first=True,
+            device=device,
+            dtype=dtype,
         )
 
         self.encoder = nn.TransformerEncoder(encoder_layer, n_layer)
 
-        self.to(dtype=dtype, device=device)
-
     def forward(self, x: T.Tensor):
-        # x: [d_seg + d_mem, d_emb]
-
-        print(x.shape)
-
-        pos = self.emb(
-            T.arange(self.d_seg + self.d_mem, dtype=self.dtype, device=self.device)
+        return self.encoder(
+            x + self.embedding(T.arange(self.l_seg, device=self.device))
         )
-
-        x = x + pos
-
-        x_h = self.encoder(x)
-
-        # mu, cov = self.split_a(a.to(dtype=T.float32))
-        # cov = cov @ cov.permute(0, 2, 1) + T.eye(
-        #     cov.shape[-1], dtype=cov.dtype, device=cov.device
-        # ).expand([cov.shape[0], -1, -1])
-        # a, prob = self.sample(mu, cov)
-        # a = self.min_a + a * (self.max_a - self.min_a)
-        #
-        # return s_hat, a, prob, artg_hat
 
     def split(self, x: T.Tensor):
         return T.split(
             x,
-            [self.d_obs + self.d_act + self.d_act**2 + 2 * self.d_rew],
+            [self.d_s, self.d_a, self.d_r, self.d_padding],
             dim=-1,
         )
-
-    def split_a(self, a):
-        mu, cov = a[..., : self.d_act], a[..., self.d_act :]
-        mu = mu.squeeze(1)
-        cov = cov.reshape([a.shape[0], self.d_act, self.d_act])
-
-        return mu, cov
 
 
 if __name__ == "__main__":
@@ -141,8 +118,12 @@ if __name__ == "__main__":
     device = T.device("cuda" if T.cuda.is_available() else "cpu")
 
     # tok = _tokenizer()
-    dt = DT().to(dtype=dtype, device=device)
-    print(dt.max_a.dtype, dt.max_a.device)
+    dt = DT(device=device, dtype=dtype)
+
+    x = T.randn([dt.l_seg, dt.d_emb], device=device, dtype=dtype)
+
+    x_h = dt(x)
+    print(x_h.shape)
 
     #
     # batches = 2
