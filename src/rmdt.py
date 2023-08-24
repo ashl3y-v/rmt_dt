@@ -46,7 +46,7 @@ def _tokenizer(
     )
 
 
-class DT(nn.Module):
+class RMDT(nn.Module):
     def __init__(
         self,
         d_s: int = 96,
@@ -57,8 +57,6 @@ class DT(nn.Module):
         l_mem: int = 8,
         n_layer: int = 4,
         n_head: int = 10,
-        min_a=T.tensor([-1, 0, 0]),
-        max_a=T.tensor([1, 1, 1]),
         dropout: float = 0.1,
         device: T.device = T.device("cuda"),
         dtype: T.dtype = T.bfloat16,
@@ -75,13 +73,10 @@ class DT(nn.Module):
 
         self.l_obs = l_obs
         self.l_mem = l_mem
-        self.l_seg = l_obs + l_mem
+        self.l_seg = l_mem + l_obs
 
         self.n_layer = n_layer
         self.n_head = n_head
-
-        self.min_a = min_a.to(device=device, dtype=dtype)
-        self.max_a = max_a.to(device=device, dtype=dtype)
 
         self.tokenizer = _tokenizer(device=device, dtype=dtype)
 
@@ -105,9 +100,13 @@ class DT(nn.Module):
             x + self.embedding(T.arange(self.l_seg, device=self.device))
         )
 
-    def split(self, x: T.Tensor):
+    def split_seg(self, x: T.Tensor):
         return T.split(
-            x,
+            x[: self.l_mem],
+            [self.d_s, self.d_a, self.d_r, self.d_padding],
+            dim=-1,
+        ), T.split(
+            x[self.l_mem :],
             [self.d_s, self.d_a, self.d_r, self.d_padding],
             dim=-1,
         )
@@ -118,12 +117,11 @@ if __name__ == "__main__":
     device = T.device("cuda" if T.cuda.is_available() else "cpu")
 
     # tok = _tokenizer()
-    dt = DT(device=device, dtype=dtype)
+    dt = RMDT(device=device, dtype=dtype)
 
     x = T.randn([dt.l_seg, dt.d_emb], device=device, dtype=dtype)
 
     x_h = dt(x)
-    print(x_h.shape)
 
     #
     # batches = 2

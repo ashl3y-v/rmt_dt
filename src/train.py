@@ -3,48 +3,34 @@ import torch as T
 from torch import nn
 from torch.nn import functional as F
 import gymnasium as gym
-# from dt import DecisionTransformer
-# from vit import ViT
 from matplotlib import pyplot as plt
 from replay_buffer import ReplayBuffer
+from dt import _tokenizer, RMDT
 
 T.manual_seed(0)
 
 T.backends.cudnn.benchmark = True
-
 T.autograd.set_detect_anomaly(True)
-
 T.backends.cuda.matmul.allow_tf32 = True
-
-# The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
 T.backends.cudnn.allow_tf32 = True
 
 parser = argparse.ArgumentParser(
     prog="Train Decision Transformer", description="Does it", epilog="Made by Ashley :)"
 )
 
-parser.add_argument("-t", "--timesteps", default=100)  # option that takes a value
-parser.add_argument("-lm", "--load_model", action="store_true")  # on/off flag
-parser.add_argument("-sm", "--save_model", action="store_true")  # on/off flag
+parser.add_argument("-t", "--timesteps", default=4096)
+parser.add_argument("-l", "--load", default="dt.pt")
+parser.add_argument("-s", "--save", default="dt.pt")
+parser.add_argument("-n", "--n_save", default=128)
 
 args = parser.parse_args()
 
 EPOCHS = int(args.timesteps)
-save_interval = 50
-device = "cuda" if T.cuda.is_available() else "cpu"
+n_save = args.n_save
+device = T.device("cuda" if T.cuda.is_available() else "cpu")
 dtype = T.bfloat16
 
-# T.set_autocast_gpu_dtype(amp_dtype)
-# T.set_autocast_cache_enabled(True)
-
-# losses = torch.tensor([], device=device)
-# rewards = torch.tensor([], device=device)
-
 env_name = "CarRacing-v2"
-d_state = 24  # 768
-d_reward = 1
-
-steps_per_action = 3
 
 n_env = 2
 
@@ -55,38 +41,45 @@ env = gym.vector.AsyncVectorEnv(
     * n_env,
     shared_memory=True,
 )
-d_obs = env.observation_space.shape
-# d_img = (d_obs[-1], d_obs[1], d_obs[2])
-d_act = env.action_space.shape[-1]
-print(d_obs)
 
-model = DecisionTransformer(
-    d_state=d_state,
-    d_act=d_act,
-    dtype=dtype,
+d_s = 96
+d_a = 3
+d_r = 1
+
+tokenizer = _tokenizer()
+
+rmdt = RMDT(
+    d_s=d_s,
+    d_a=d_a,
+    d_r=d_r,
+    d_padding=0,
+    l_obs=16,
+    l_mem=8,
+    n_layer=4,
+    n_head=10,
     device=device,
+    dtype=dtype,
 )
 
 if args.load_model:
-    model.load()
-
-# vit = ViT(d_img=d_img, n_env=n_env, dtype=dtype, device=device)
-
-trainer = Trainer(model.parameters(), epochs=EPOCHS)
+    rmdt.load_state_dict(T.load(args.load))
 
 
 for e in range(EPOCHS):
     T.cuda.empty_cache()
 
     obs, _ = env.reset()
-    replay_buffer = ReplayBuffer(
-        n_env=n_env,
-        d_state=d_state,
-        d_act=d_act,
-        d_reward=d_reward,
-        dtype=dtype,
-        device=device,
-    )
+    # fix
+    # replay_buffer = ReplayBuffer(
+    #     n_env=n_env,
+    #     d_state=d_state,
+    #     d_act=d_act,
+    #     d_reward=d_reward,
+    #     dtype=dtype,
+    #     device=device,
+    # )
+
+    mem = T.zeros([rmdt.l_mem, rmdt.d_emb], device=device, dtype=dtype)
 
     terminated = truncated = T.tensor([False] * n_env)
     i = 0
@@ -95,6 +88,8 @@ for e in range(EPOCHS):
 
         T.cuda.empty_cache()
         before = T.cuda.memory_reserved()
+
+        x_h = rmdt()
         s_hat, a, prob, artg_hat = replay_buffer.predict(model)
 
         a_np = a.detach().cpu().numpy()
@@ -112,7 +107,9 @@ for e in range(EPOCHS):
             [n_env, d_reward]
         )
 
-        replay_buffer.append(s.detach(), a.detach(), r.detach(), artg_hat.detach(), prob)
+        replay_buffer.append(
+            s.detach(), a.detach(), r.detach(), artg_hat.detach(), prob
+        )
 
         print("delta", (T.cuda.memory_reserved() - before) / replay_buffer.s.shape[1])
         print("mem", T.cuda.memory_reserved() / i**2)

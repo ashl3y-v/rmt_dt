@@ -173,26 +173,6 @@ class ReplayBuffer(nn.Module):
             ]
         )
 
-    # def compress_seq(self, seq, dim=0):
-    #     n_blocks = (seq.shape[dim] - self.max_size) // self.block_size
-    #     blocks = seq[:, : self.block_size * n_blocks, :]
-    #     seq = seq[:, self.block_size * n_blocks :, :]
-    #     blocks = T.stack(T.split(blocks, self.block_size, dim=dim), dim=dim)
-    #     compressed = blocks.mean(dim=dim)
-    #
-    #     return T.cat([compressed, seq], dim=dim)
-    #
-    # def compress(self):
-    #     if self.length() > self.max_size:
-    #         self.states = self.compress_seq(self.states, dim=1)
-    #         self.actions = self.compress_seq(self.actions, dim=1)
-    #         self.rewards = (
-    #             self.compress_seq(self.rewards.unsqueeze(0), dim=1)
-    #             .squeeze()
-    #             .unsqueeze(-1)
-    #         )
-    #         self.R_preds = self.compress_seq(self.R_preds, dim=1)
-
 
 if __name__ == "__main__":
     dtype = T.bfloat16
