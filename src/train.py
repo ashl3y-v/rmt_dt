@@ -4,8 +4,7 @@ from torch import nn
 from torch.nn import functional as F
 import gymnasium as gym
 from matplotlib import pyplot as plt
-from replay_buffer import ReplayBuffer
-from dt import _tokenizer, RMDT
+from rmdt import _tokenizer, RMDT
 
 T.manual_seed(0)
 
@@ -68,18 +67,17 @@ if args.load_model:
 for e in range(EPOCHS):
     T.cuda.empty_cache()
 
-    obs, _ = env.reset()
-    # fix
-    # replay_buffer = ReplayBuffer(
-    #     n_env=n_env,
-    #     d_state=d_state,
-    #     d_act=d_act,
-    #     d_reward=d_reward,
-    #     dtype=dtype,
-    #     device=device,
-    # )
-
     mem = T.zeros([rmdt.l_mem, rmdt.d_emb], device=device, dtype=dtype)
+
+    obs, _ = env.reset()
+
+    o = tokenizer(obs)
+    x = T.cat([o, T.zeros([rmdt.d_a]), T.zeros([rmdt.d_r])])
+    a, mem = rmdt.extract_mem_a(rmdt(x))
+
+    # s, a, r, padding
+    replay_buf = T.tensor([])
+
 
     terminated = truncated = T.tensor([False] * n_env)
     i = 0
@@ -89,6 +87,7 @@ for e in range(EPOCHS):
         T.cuda.empty_cache()
         before = T.cuda.memory_reserved()
 
+        x = T.cat(replay_buf, mem, dim=0)
         x_h = rmdt()
         s_hat, a, prob, artg_hat = replay_buffer.predict(model)
 

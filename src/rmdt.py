@@ -100,13 +100,12 @@ class RMDT(nn.Module):
             x + self.embedding(T.arange(self.l_seg, device=self.device))
         )
 
-    def split_seg(self, x: T.Tensor):
+    def extract_mem_a(self, x: T.Tensor):
+        return x[:self.l_mem], x[self.l_mem:, self.d_s:]
+
+    def split_emb(self, x: T.Tensor):
         return T.split(
-            x[: self.l_mem],
-            [self.d_s, self.d_a, self.d_r, self.d_padding],
-            dim=-1,
-        ), T.split(
-            x[self.l_mem :],
+            x,
             [self.d_s, self.d_a, self.d_r, self.d_padding],
             dim=-1,
         )
