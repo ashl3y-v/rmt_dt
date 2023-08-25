@@ -1,10 +1,10 @@
-import argparse
-import torch as T
+from matplotlib import pyplot as plt
+from rmdt import RMDT
 from torch import nn
 from torch.nn import functional as F
+import argparse
 import gymnasium as gym
-from matplotlib import pyplot as plt
-from rmdt import _tokenizer, RMDT
+import torch as T
 
 T.manual_seed(0)
 
@@ -18,66 +18,61 @@ parser = argparse.ArgumentParser(
 )
 
 parser.add_argument("-t", "--timesteps", default=4096)
-parser.add_argument("-l", "--load", default="dt.pt")
-parser.add_argument("-s", "--save", default="dt.pt")
+parser.add_argument("-l", "--load")
+parser.add_argument("-s", "--save")
 parser.add_argument("-n", "--n_save", default=128)
 
 args = parser.parse_args()
 
-EPOCHS = int(args.timesteps)
-n_save = args.n_save
 device = T.device("cuda" if T.cuda.is_available() else "cpu")
 dtype = T.bfloat16
 
 env_name = "CarRacing-v2"
 
-n_env = 2
+n_env = 3
 
-env = gym.vector.AsyncVectorEnv(
-    [
-        lambda: gym.make(env_name),
-    ]
-    * n_env,
-    shared_memory=True,
-)
-
-d_s = 96
-d_a = 3
-d_r = 1
-
-tokenizer = _tokenizer()
+env = gym.make_vec("HalfCheetah-v4", num_envs=n_env)
 
 rmdt = RMDT(
-    d_s=d_s,
-    d_a=d_a,
-    d_r=d_r,
+    d_s=env.observation_space.shape[-1],
+    d_a=env.action_space.shape[-1],
+    d_r=1,
     d_padding=0,
-    l_obs=16,
-    l_mem=8,
-    n_layer=4,
-    n_head=10,
+    l_obs=10,
+    l_overlap=2,
+    l_mem=4,
+    n_layer=8,
+    n_head=4,
     device=device,
     dtype=dtype,
 )
 
-if args.load_model:
+if args.load:
     rmdt.load_state_dict(T.load(args.load))
 
 
-for e in range(EPOCHS):
+for e in range(args.timesteps):
     T.cuda.empty_cache()
 
     mem = T.zeros([rmdt.l_mem, rmdt.d_emb], device=device, dtype=dtype)
 
-    obs, _ = env.reset()
 
-    o = tokenizer(obs)
-    x = T.cat([o, T.zeros([rmdt.d_a]), T.zeros([rmdt.d_r])])
+    obs, info = env.reset()
+    o = T.tensor(obs, device=device, dtype=dtype)
+
+    # s0 si
+    # a0 ai
+    # r0 ri
+
+    buf = T.cat(
+        [
+            o.unsqueeze(1),
+            T.zeros([n_env, 1, rmdt.d_a + rmdt.d_r], device=device, dtype=dtype),
+        ],
+        dim=-1,
+    )
+
     a, mem = rmdt.extract_mem_a(rmdt(x))
-
-    # s, a, r, padding
-    replay_buf = T.tensor([])
-
 
     terminated = truncated = T.tensor([False] * n_env)
     i = 0
@@ -87,9 +82,10 @@ for e in range(EPOCHS):
         T.cuda.empty_cache()
         before = T.cuda.memory_reserved()
 
-        x = T.cat(replay_buf, mem, dim=0)
-        x_h = rmdt()
-        s_hat, a, prob, artg_hat = replay_buffer.predict(model)
+        x = T.cat([mem, replay_buf[-rmdt.l_obs]], dim=0)
+        # s_hat, a, prob, artg_hat = replay_buffer.predict(model)
+
+        a, mem = rmdt.extract_mem_a(rmdt(x))
 
         a_np = a.detach().cpu().numpy()
         a = a.to(dtype=dtype)

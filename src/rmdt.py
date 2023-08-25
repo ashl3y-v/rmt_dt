@@ -53,8 +53,9 @@ class RMDT(nn.Module):
         d_a: int = 3,
         d_r: int = 1,
         d_padding: int = 0,
-        l_obs: int = 16,
         l_mem: int = 8,
+        l_obs: int = 16,
+        l_overlap: int = 2,
         n_layer: int = 4,
         n_head: int = 10,
         dropout: float = 0.1,
@@ -71,14 +72,13 @@ class RMDT(nn.Module):
         self.d_padding = d_padding
         self.d_emb = d_s + d_a + d_r + d_padding
 
-        self.l_obs = l_obs
         self.l_mem = l_mem
-        self.l_seg = l_mem + l_obs
+        self.l_obs = l_obs
+        self.l_overlap = l_overlap
+        self.l_seg = l_mem + l_obs + l_overlap
 
         self.n_layer = n_layer
         self.n_head = n_head
-
-        self.tokenizer = _tokenizer(device=device, dtype=dtype)
 
         self.embedding = nn.Embedding(
             self.l_seg, self.d_emb, device=device, dtype=dtype
@@ -115,7 +115,6 @@ if __name__ == "__main__":
     dtype = T.bfloat16
     device = T.device("cuda" if T.cuda.is_available() else "cpu")
 
-    # tok = _tokenizer()
     dt = RMDT(device=device, dtype=dtype)
 
     x = T.randn([dt.l_seg, dt.d_emb], device=device, dtype=dtype)
