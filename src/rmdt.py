@@ -49,15 +49,14 @@ def _tokenizer(
 class RMDT(nn.Module):
     def __init__(
         self,
-        d_s: int = 96,
-        d_a: int = 3,
+        d_s: int = 17,
+        d_a: int = 6,
         d_r: int = 1,
-        d_padding: int = 0,
         l_mem: int = 8,
-        l_obs: int = 16,
-        l_overlap: int = 2,
+        l_obs: int = 12,
+        l_olap: int = 4,
         n_layer: int = 4,
-        n_head: int = 10,
+        n_head: int = 8,
         dropout: float = 0.1,
         device: T.device = T.device("cuda"),
         dtype: T.dtype = T.bfloat16,
@@ -69,13 +68,12 @@ class RMDT(nn.Module):
         self.d_s = d_s
         self.d_a = d_a
         self.d_r = d_r
-        self.d_padding = d_padding
-        self.d_emb = d_s + d_a + d_r + d_padding
+        self.d_emb = d_s + d_a + d_r
 
         self.l_mem = l_mem
+        self.l_olap = l_olap
         self.l_obs = l_obs
-        self.l_overlap = l_overlap
-        self.l_seg = l_mem + l_obs + l_overlap
+        self.l_seg = l_mem + l_olap + l_obs
 
         self.n_layer = n_layer
         self.n_head = n_head
@@ -101,25 +99,58 @@ class RMDT(nn.Module):
         )
 
     def extract_mem_a(self, x: T.Tensor):
-        return x[:self.l_mem], x[self.l_mem:, self.d_s:]
+        return x[: self.l_mem], x[self.l_mem :, self.d_s :]
 
-    def split_emb(self, x: T.Tensor):
-        return T.split(
-            x,
-            [self.d_s, self.d_a, self.d_r, self.d_padding],
-            dim=-1,
-        )
+    def to_x(self, s: T.Tensor, a: T.Tensor, r: T.Tensor):
+        assert s.size(-1) == self.d_s
+        assert a.size(-1) == self.d_a
+        assert r.size(-1) == self.d_r
+
+        return T.cat([s, a, r], dim=-1)
+
+    def to_x_seg(self, s: T.Tensor, a: T.Tensor, r: T.Tensor):
+        assert s.size(-1) == self.d_s
+        assert a.size(-1) == self.d_a
+        assert r.size(-1) == self.d_r
+
+        s = s[:, -self.l_seg :]
+        a = a[:, -self.l_seg :]
+        r = r[:, -self.l_seg :]
+
+        return T.cat([s, a, r], dim=-1)
+
+    def from_x(self, x_h: T.Tensor):
+        mem = x_h[:, : self.l_mem]
+        a = x_h[:, -self.l_obs :]
+
+        # l_mem: int = 8,
+        # l_obs: int = 12,
+        # l_olap: int = 4,
+        # return T.split(
+        #     x_h,
+        #     [self.d_s, self.d_a, self.d_r],
+        #     dim=-1,
+        # )
+
+        return mem, a
 
 
 if __name__ == "__main__":
     dtype = T.bfloat16
     device = T.device("cuda" if T.cuda.is_available() else "cpu")
 
-    dt = RMDT(device=device, dtype=dtype)
+    rmdt = RMDT(device=device, dtype=dtype)
 
-    x = T.randn([dt.l_seg, dt.d_emb], device=device, dtype=dtype)
+    n = 3
+    l = 32
 
-    x_h = dt(x)
+    s = T.zeros([n, l, rmdt.d_s], device=device, dtype=dtype)
+    a = T.zeros([n, l, rmdt.d_a], device=device, dtype=dtype)
+    r = T.zeros([n, l, rmdt.d_r], device=device, dtype=dtype)
+
+    mem, a = rmdt.from_x(rmdt(rmdt.to_x_seg(s, a, r)))
+    print(mem.shape, a.shape)
+    # rmdt.from_x(x_h)
 
     #
     # batches = 2

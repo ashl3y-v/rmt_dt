@@ -47,6 +47,8 @@ rmdt = RMDT(
     dtype=dtype,
 )
 
+print(rmdt.d_s, rmdt.d_a, rmdt.d_r)
+
 if args.load:
     rmdt.load_state_dict(T.load(args.load))
 
