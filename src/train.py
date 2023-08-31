@@ -71,7 +71,7 @@ for e in range(args.epochs):
             obs, reward, terminated, truncated, info = env.step(a_np[..., a_i, :])
             o = T.tensor(obs, device=device, dtype=dtype).unsqueeze(1)
             r = T.tensor(reward, device=device, dtype=dtype).unsqueeze(1).unsqueeze(2)
-            buf = T.cat([buf, T.cat([o, a[..., a_i:a_i+1, :], r], dim=-1)], dim=-2)
+            buf = T.cat([buf, T.cat([o, a[..., a_i : a_i + 1, :], r], dim=-1)], dim=-2)
 
         terminated, truncated = T.tensor(terminated), T.tensor(truncated)
 
