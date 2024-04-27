@@ -1,1 +1,2 @@
-Hi
+# Recurrent Memory Transformer for Reinforcement Learning
+An attempt to use a [RMT](https://arxiv.org/abs/2304.11062)-like architecture for [Decision Transformer](https://arxiv.org/abs/2106.01345)-like tasks. This implementation didn't succeed in getting good performance, possibly because of a lack of compute or problems in the implementation. The idea was done successfully after I stopped working on it in [Recurrent Action Transformer with Memory](https://arxiv.org/abs/2306.09459).
